@@ -185,10 +185,10 @@ def generate_bundle_apple_embedded(platform, framework_dir, framework_dir_sim, u
         app_prefix += ".dev"
         rel_prefix += ".dev"
         dbg_prefix += ".dev"
-    if env["precision"] == "double":
-        app_prefix += ".double"
-        rel_prefix += ".double"
-        dbg_prefix += ".double"
+    # if env["precision"] == "double":
+    #     app_prefix += ".double"
+    #     rel_prefix += ".double"
+    #     dbg_prefix += ".double"
 
     # Lipo template libraries.
     #

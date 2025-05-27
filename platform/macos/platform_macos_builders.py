@@ -15,8 +15,8 @@ def generate_bundle(target, source, env):
         prefix = "godot." + env["platform"] + "." + env["target"]
         if env.dev_build:
             prefix += ".dev"
-        if env["precision"] == "double":
-            prefix += ".double"
+        # if env["precision"] == "double":
+        #     prefix += ".double"
 
         # Lipo editor executable.
         target_bin = lipo(bin_dir + "/" + prefix, env.extra_suffix + env.module_version_string)
@@ -80,10 +80,10 @@ def generate_bundle(target, source, env):
             app_prefix += ".dev"
             rel_prefix += ".dev"
             dbg_prefix += ".dev"
-        if env["precision"] == "double":
-            app_prefix += ".double"
-            rel_prefix += ".double"
-            dbg_prefix += ".double"
+        # if env["precision"] == "double":
+        #     app_prefix += ".double"
+        #     rel_prefix += ".double"
+        #     dbg_prefix += ".double"
 
         # Lipo template executables.
         rel_target_bin = lipo(bin_dir + "/" + rel_prefix, env.extra_suffix + env.module_version_string)

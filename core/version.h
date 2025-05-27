@@ -65,11 +65,8 @@
 // the status (beta, stable, etc.), potential module-specific features (e.g. mono)
 // and double-precision status.
 // Example: "3.1.4.stable.mono.double"
-#ifdef REAL_T_IS_DOUBLE
-#define GODOT_VERSION_FULL_CONFIG GODOT_VERSION_NUMBER "." GODOT_VERSION_STATUS GODOT_VERSION_MODULE_CONFIG ".double"
-#else
 #define GODOT_VERSION_FULL_CONFIG GODOT_VERSION_NUMBER "." GODOT_VERSION_STATUS GODOT_VERSION_MODULE_CONFIG
-#endif
+
 
 // Similar to GODOT_VERSION_FULL_CONFIG, but also includes the (potentially custom) GODOT_VERSION_BUILD
 // description (e.g. official, custom_build, etc.).
