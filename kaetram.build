@@ -1,0 +1,32 @@
+{
+	"disabled_build_options": {
+		"disable_3d": true,
+		"disable_3d_physics": true,
+		"disable_xr": true,
+		"module_text_server_fb_enabled": true
+	},
+	"disabled_classes": [
+		"BaseMaterial3D",
+		"Curve3D",
+		"Mesh",
+		"MeshLibrary",
+		"MultiMesh",
+		"NavigationMesh",
+		"Node3D",
+		"Occluder3D",
+		"OpenXRActionMap",
+		"OpenXRActionSet",
+		"OpenXRBindingModifier",
+		"OpenXRHapticBase",
+		"OpenXRIPBinding",
+		"OpenXRInteractionProfile",
+		"RDShaderFile",
+		"RDShaderSPIRV",
+		"Shape3D",
+		"SkeletonModification2D",
+		"SkeletonModificationStack2D",
+		"SkeletonProfile",
+		"World3D"
+	],
+	"type": "build_profile"
+}
