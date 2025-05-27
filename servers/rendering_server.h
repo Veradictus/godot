@@ -1605,6 +1605,8 @@ public:
 
 	virtual void canvas_item_set_use_parent_material(RID p_item, bool p_enable) = 0;
 
+	virtual void canvas_item_set_override_snap_2d_transforms(RID p_item, bool p_enable) = 0;
+
 	virtual void canvas_item_set_instance_shader_parameter(RID p_item, const StringName &, const Variant &p_value) = 0;
 	virtual Variant canvas_item_get_instance_shader_parameter(RID p_item, const StringName &) const = 0;
 	virtual Variant canvas_item_get_instance_shader_parameter_default_value(RID p_item, const StringName &) const = 0;

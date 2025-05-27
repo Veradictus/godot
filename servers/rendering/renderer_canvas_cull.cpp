@@ -347,7 +347,7 @@ void RendererCanvasCull::_cull_canvas_item(Item *p_canvas_item, const Transform2
 
 		Transform2D parent_xform = p_parent_xform;
 
-		if (snapping_2d_transforms_to_pixel) {
+		if (snapping_2d_transforms_to_pixel && !ci->override_snap_2d_transforms) {
 			self_xform.columns[2] = (self_xform.columns[2] + Point2(0.5, 0.5)).floor();
 			parent_xform.columns[2] = (parent_xform.columns[2] + Point2(0.5, 0.5)).floor();
 		}
@@ -1931,6 +1931,13 @@ void RendererCanvasCull::canvas_item_set_use_parent_material(RID p_item, bool p_
 
 	canvas_item->use_parent_material = p_enable;
 	_item_queue_update(canvas_item, true);
+}
+
+void RendererCanvasCull::canvas_item_set_override_snap_2d_transforms(RID p_item, bool p_enable) {
+	Item *canvas_item = canvas_item_owner.get_or_null(p_item);
+	ERR_FAIL_NULL(canvas_item);
+
+	canvas_item->override_snap_2d_transforms = p_enable;
 }
 
 void RendererCanvasCull::canvas_item_set_instance_shader_parameter(RID p_item, const StringName &p_parameter, const Variant &p_value) {

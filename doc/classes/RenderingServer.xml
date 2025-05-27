@@ -629,6 +629,14 @@
 				Sets if the [CanvasItem] uses its parent's material.
 			</description>
 		</method>
+		<method name="canvas_item_set_override_snap_2d_transforms">
+			<return type="void" />
+			<param index="0" name="item" type="RID" />
+			<param index="1" name="enabled" type="bool" />
+			<description>
+				If [param enabled] is [code]true[/code], the canvas item specified by the [param item] RID will override the snap 2D transforms setting of its parent. Equivalent to [member CanvasItem.override_snap_2d_transform].
+			</description>
+		</method>
 		<method name="canvas_item_set_visibility_layer">
 			<return type="void" />
 			<param index="0" name="item" type="RID" />

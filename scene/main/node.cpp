@@ -216,6 +216,9 @@ void Node::_notification(int p_notification) {
 			if (data.unhandled_key_input) {
 				add_to_group("_vp_unhandled_key_input" + itos(get_viewport()->get_instance_id()));
 			}
+			if (data.unhandled_picking_input) {
+				add_to_group("_vp_unhandled_picking_input" + itos(get_viewport()->get_instance_id()));
+			}
 
 			get_tree()->nodes_in_tree_count++;
 			orphan_node_count--;
@@ -259,6 +262,9 @@ void Node::_notification(int p_notification) {
 			}
 			if (data.unhandled_key_input) {
 				remove_from_group("_vp_unhandled_key_input" + itos(get_viewport()->get_instance_id()));
+			}
+			if (data.unhandled_picking_input) {
+				remove_from_group("_vp_unhandled_picking_input" + itos(get_viewport()->get_instance_id()));
 			}
 
 			// Remove from processing first.
@@ -307,6 +313,11 @@ void Node::_notification(int p_notification) {
 
 			if (GDVIRTUAL_IS_OVERRIDDEN(_unhandled_key_input)) {
 				set_process_unhandled_key_input(true);
+			}
+
+
+			if (GDVIRTUAL_IS_OVERRIDDEN(_unhandled_picking_input)) {
+				set_process_unhandled_picking_input(true);
 			}
 
 			if (GDVIRTUAL_IS_OVERRIDDEN(_process)) {
@@ -1370,6 +1381,28 @@ void Node::set_process_unhandled_key_input(bool p_enable) {
 bool Node::is_processing_unhandled_key_input() const {
 	return data.unhandled_key_input;
 }
+
+void Node::set_process_unhandled_picking_input(bool p_enable) {
+	ERR_THREAD_GUARD
+	if (p_enable == data.unhandled_picking_input) {
+		return;
+	}
+	data.unhandled_picking_input = p_enable;
+	if (!is_inside_tree()) {
+		return;
+	}
+
+	if (p_enable) {
+		add_to_group("_vp_unhandled_picking_input" + itos(get_viewport()->get_instance_id()));
+	} else {
+		remove_from_group("_vp_unhandled_picking_input" + itos(get_viewport()->get_instance_id()));
+	}
+}
+
+bool Node::is_processing_unhandled_picking_input() const {
+	return data.unhandled_picking_input;
+}
+
 
 void Node::set_auto_translate_mode(AutoTranslateMode p_mode) {
 	ERR_THREAD_GUARD
@@ -3693,6 +3726,16 @@ void Node::_call_unhandled_key_input(const Ref<InputEvent> &p_event) {
 	unhandled_key_input(p_event);
 }
 
+void Node::_call_unhandled_picking_input(const Ref<InputEvent> &p_event) {
+	if (p_event->get_device() != InputEvent::DEVICE_ID_INTERNAL) {
+		GDVIRTUAL_CALL(_unhandled_picking_input, p_event);
+	}
+	if (!is_inside_tree() || !get_viewport() || get_viewport()->is_input_handled()) {
+		return;
+	}
+	unhandled_picking_input(p_event);
+}
+
 void Node::_validate_property(PropertyInfo &p_property) const {
 	if ((p_property.name == "process_thread_group_order" || p_property.name == "process_thread_messages") && data.process_thread_group == PROCESS_THREAD_GROUP_INHERIT) {
 		p_property.usage = 0;
@@ -3709,6 +3752,9 @@ void Node::unhandled_input(const Ref<InputEvent> &p_event) {
 }
 
 void Node::unhandled_key_input(const Ref<InputEvent> &p_key_event) {
+}
+
+void Node::unhandled_picking_input(const Ref<InputEvent> &p_picking_event) {
 }
 
 Variant Node::_call_deferred_thread_group_bind(const Variant **p_args, int p_argcount, Callable::CallError &r_error) {
@@ -3905,6 +3951,8 @@ void Node::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("is_processing_unhandled_input"), &Node::is_processing_unhandled_input);
 	ClassDB::bind_method(D_METHOD("set_process_unhandled_key_input", "enable"), &Node::set_process_unhandled_key_input);
 	ClassDB::bind_method(D_METHOD("is_processing_unhandled_key_input"), &Node::is_processing_unhandled_key_input);
+	ClassDB::bind_method(D_METHOD("set_process_unhandled_picking_input", "enable"), &Node::set_process_unhandled_picking_input);
+	ClassDB::bind_method(D_METHOD("is_processing_unhandled_picking_input"), &Node::is_processing_unhandled_picking_input);
 	ClassDB::bind_method(D_METHOD("set_process_mode", "mode"), &Node::set_process_mode);
 	ClassDB::bind_method(D_METHOD("get_process_mode"), &Node::get_process_mode);
 	ClassDB::bind_method(D_METHOD("can_process"), &Node::can_process);
@@ -4182,6 +4230,7 @@ void Node::_bind_methods() {
 	GDVIRTUAL_BIND(_shortcut_input, "event");
 	GDVIRTUAL_BIND(_unhandled_input, "event");
 	GDVIRTUAL_BIND(_unhandled_key_input, "event");
+	GDVIRTUAL_BIND(_unhandled_picking_input, "event");
 	GDVIRTUAL_BIND(_get_focused_accessibility_element);
 	GDVIRTUAL_BIND(_get_accessibility_container_name, "node");
 }
@@ -4218,6 +4267,7 @@ Node::Node() {
 	data.shortcut_input = false;
 	data.unhandled_input = false;
 	data.unhandled_key_input = false;
+	data.unhandled_picking_input = false;
 
 	data.physics_interpolated = true;
 	data.physics_interpolation_reset_requested = false;

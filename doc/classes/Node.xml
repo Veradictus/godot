@@ -154,6 +154,17 @@
 				[b]Note:[/b] This method is only called if the node is present in the scene tree (i.e. if it's not an orphan).
 			</description>
 		</method>
+		<method name="_unhandled_picking_input" qualifiers="virtual">
+			<return type="void" />
+			<param index="0" name="event" type="InputEvent" />
+			<description>
+				Called when an [InputEventKey] hasn't been consumed by physics picking. The input event propagates up through the node tree in the current [Viewport] until a node consumes it.
+				It is only called if unhandled picking input processing is enabled, which is done automatically if this method is overridden, and can be toggled with [method set_process_unhandled_picking_input].
+				To consume the input event and stop it propagating further to other nodes, [method Viewport.set_input_as_handled] can be called.
+				This method can be used to handle mouse and touch events that were not set to handled during physics picking.
+				[b]Note:[/b] This method is only called if the node is present in the scene tree (i.e. if it's not an orphan).
+			</description>
+		</method>
 		<method name="add_child">
 			<return type="void" />
 			<param index="0" name="node" type="Node" />

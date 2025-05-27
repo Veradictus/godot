@@ -1003,6 +1003,10 @@ void Viewport::_process_picking() {
 			}
 		}
 #endif // PHYSICS_3D_DISABLED
+		if (!local_input_handled) {
+			ERR_FAIL_COND(!is_inside_tree());
+			get_tree()->_call_input_pause(unhandled_picking_input_group, SceneTree::CALL_INPUT_TYPE_UNHANDLED_PICKING_INPUT, ev, this);
+		}
 	}
 }
 #endif // !defined(PHYSICS_2D_DISABLED) || !defined(PHYSICS_3D_DISABLED)
@@ -5331,6 +5335,7 @@ Viewport::Viewport() {
 	unhandled_input_group = "_vp_unhandled_input" + id;
 	shortcut_input_group = "_vp_shortcut_input" + id;
 	unhandled_key_input_group = "_vp_unhandled_key_input" + id;
+	unhandled_picking_input_group = "_vp_unhandled_picking_input" + id;
 
 	// Window tooltip.
 	gui.tooltip_delay = GLOBAL_GET("gui/timers/tooltip_delay_sec");

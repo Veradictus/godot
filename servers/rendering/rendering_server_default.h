@@ -1003,6 +1003,8 @@ public:
 	FUNC2C(canvas_item_get_instance_shader_parameter_list, RID, List<PropertyInfo> *)
 
 	FUNC2(canvas_item_set_use_parent_material, RID, bool)
+	
+	FUNC2(canvas_item_set_override_snap_2d_transforms, RID, bool)
 
 	FUNC5(canvas_item_set_visibility_notifier, RID, bool, const Rect2 &, const Callable &, const Callable &)
 

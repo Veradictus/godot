@@ -50,6 +50,7 @@ public:
 		Color modulate;
 		Color self_modulate;
 		bool use_parent_material;
+		bool override_snap_2d_transforms;
 		int index;
 		bool children_order_dirty;
 		int ysort_children_count;
@@ -90,6 +91,7 @@ public:
 			self_modulate = Color(1, 1, 1, 1);
 			sort_y = false;
 			use_parent_material = false;
+			override_snap_2d_transforms = false;
 			z_relative = true;
 			index = 0;
 			ysort_children_count = -1;
@@ -287,6 +289,8 @@ public:
 	void canvas_item_set_material(RID p_item, RID p_material);
 
 	void canvas_item_set_use_parent_material(RID p_item, bool p_enable);
+
+	void canvas_item_set_override_snap_2d_transforms(RID p_item, bool p_enable);
 
 	void canvas_item_set_instance_shader_parameter(RID p_item, const StringName &p_parameter, const Variant &p_value);
 	void canvas_item_get_instance_shader_parameter_list(RID p_item, List<PropertyInfo> *p_parameters) const;

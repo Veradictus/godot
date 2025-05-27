@@ -1207,6 +1207,17 @@ bool CanvasItem::get_use_parent_material() const {
 	return use_parent_material;
 }
 
+void CanvasItem::set_override_snap_2d_transforms(bool p_override) {
+	ERR_THREAD_GUARD;
+	override_snap_2d_transforms = p_override;
+	RS::get_singleton()->canvas_item_set_override_snap_2d_transforms(canvas_item, p_override);
+}
+
+bool CanvasItem::get_override_snap_2d_transforms() const {
+	ERR_READ_THREAD_GUARD_V(false);
+	return override_snap_2d_transforms;
+}
+
 Ref<Material> CanvasItem::get_material() const {
 	ERR_READ_THREAD_GUARD_V(Ref<Material>());
 	return material;
@@ -1401,6 +1412,9 @@ void CanvasItem::_bind_methods() {
 
 	ClassDB::bind_method(D_METHOD("set_use_parent_material", "enable"), &CanvasItem::set_use_parent_material);
 	ClassDB::bind_method(D_METHOD("get_use_parent_material"), &CanvasItem::get_use_parent_material);
+	
+	ClassDB::bind_method(D_METHOD("set_override_snap_2d_transforms", "enable"), &CanvasItem::set_override_snap_2d_transforms);
+	ClassDB::bind_method(D_METHOD("get_override_snap_2d_transforms"), &CanvasItem::get_override_snap_2d_transforms);
 
 	ClassDB::bind_method(D_METHOD("set_notify_local_transform", "enable"), &CanvasItem::set_notify_local_transform);
 	ClassDB::bind_method(D_METHOD("is_local_transform_notification_enabled"), &CanvasItem::is_local_transform_notification_enabled);
@@ -1451,6 +1465,8 @@ void CanvasItem::_bind_methods() {
 	ADD_GROUP("Material", "");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "material", PROPERTY_HINT_RESOURCE_TYPE, "CanvasItemMaterial,ShaderMaterial"), "set_material", "get_material");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "use_parent_material"), "set_use_parent_material", "get_use_parent_material");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "override_snap_2d_transforms"), "set_override_snap_2d_transforms", "get_override_snap_2d_transforms");
+
 	// ADD_PROPERTY(PropertyInfo(Variant::BOOL,"transform/notify"),"set_transform_notify","is_transform_notify_enabled");
 
 	ADD_SIGNAL(MethodInfo("draw"));
