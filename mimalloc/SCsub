@@ -95,6 +95,6 @@ lib = env.add_library("mimalloc", mimalloc_sources)
 
 # For override to work on non-Windows platforms, it must be linked first.
 # This way is somewhat hacky, but reliable.
-env.Prepend(LINKFLAGS=[f"mimalloc/{lib[0].get_path()}"])
+env.Prepend(LINKFLAGS=[lib[0].get_path()])
 # We still add it the regular way to ensure the program depends on it.
 env.Prepend(LIBS=[lib])
