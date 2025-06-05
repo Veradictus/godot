@@ -59,10 +59,6 @@ String DisplayServerIOS::get_name() const {
 }
 
 int DisplayServerIOS::screen_get_dpi(int p_screen) const {
-	p_screen = _get_screen_index(p_screen);
-	int screen_count = get_screen_count();
-	ERR_FAIL_INDEX_V(p_screen, screen_count, 72);
-
 	struct utsname systemInfo;
 	uname(&systemInfo);
 
@@ -100,10 +96,6 @@ int DisplayServerIOS::screen_get_dpi(int p_screen) const {
 }
 
 float DisplayServerIOS::screen_get_refresh_rate(int p_screen) const {
-	p_screen = _get_screen_index(p_screen);
-	int screen_count = get_screen_count();
-	ERR_FAIL_INDEX_V(p_screen, screen_count, SCREEN_REFRESH_RATE_FALLBACK);
-
 	float fps = [UIScreen mainScreen].maximumFramesPerSecond;
 	if ([NSProcessInfo processInfo].lowPowerModeEnabled) {
 		fps = 60;
@@ -112,9 +104,5 @@ float DisplayServerIOS::screen_get_refresh_rate(int p_screen) const {
 }
 
 float DisplayServerIOS::screen_get_scale(int p_screen) const {
-	p_screen = _get_screen_index(p_screen);
-	int screen_count = get_screen_count();
-	ERR_FAIL_INDEX_V(p_screen, screen_count, 1.0f);
-
 	return [UIScreen mainScreen].scale;
 }

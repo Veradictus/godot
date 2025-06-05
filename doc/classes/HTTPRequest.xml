@@ -179,7 +179,7 @@
 		<method name="get_http_client_status" qualifiers="const">
 			<return type="int" enum="HTTPClient.Status" />
 			<description>
-				Returns the current status of the underlying [HTTPClient].
+				Returns the current status of the underlying [HTTPClient]. See [enum HTTPClient.Status].
 			</description>
 		</method>
 		<method name="request">

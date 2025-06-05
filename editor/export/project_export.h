@@ -44,7 +44,6 @@ class LinkButton;
 class MenuButton;
 class OptionButton;
 class PopupMenu;
-class ProjectExportDialog;
 class RichTextLabel;
 class TabContainer;
 class Tree;
@@ -53,7 +52,6 @@ class TreeItem;
 class ProjectExportTextureFormatError : public HBoxContainer {
 	GDCLASS(ProjectExportTextureFormatError, HBoxContainer);
 
-	ProjectExportDialog *export_dialog = nullptr;
 	Label *texture_format_error_label = nullptr;
 	LinkButton *fix_texture_format_button = nullptr;
 	String setting_identifier;
@@ -65,7 +63,7 @@ protected:
 
 public:
 	void show_for_texture_format(const String &p_friendly_name, const String &p_setting_identifier);
-	ProjectExportTextureFormatError(ProjectExportDialog *p_export_dialog);
+	ProjectExportTextureFormatError();
 };
 
 class ProjectExportDialog : public ConfirmationDialog {

@@ -13,10 +13,9 @@
 #define USING_MOBILE_RENDERER
 
 layout(push_constant, std430) uniform DrawCall {
-	uint uv_offset;
+	vec2 uv_offset;
 	uint instance_index;
-	uint multimesh_motion_vectors_current_offset;
-	uint multimesh_motion_vectors_previous_offset;
+	uint pad;
 #ifdef UBERSHADER
 	uint sc_packed_0;
 	uint sc_packed_1;
@@ -304,7 +303,6 @@ scene_data_block;
 
 struct InstanceData {
 	highp mat4 transform; // 64 - 64
-	highp mat4 prev_transform;
 	uint flags; // 04 - 68
 	uint instance_uniforms_ofs; // Base offset in global buffer for instance variables.	// 04 - 72
 	uint gi_offset; // GI information when using lightmapping (VCT or lightmap index).    // 04 - 76

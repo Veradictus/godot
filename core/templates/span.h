@@ -30,7 +30,6 @@
 
 #pragma once
 
-#include "core/error/error_macros.h"
 #include "core/typedefs.h"
 
 // Equivalent of std::span.

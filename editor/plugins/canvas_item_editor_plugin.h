@@ -256,8 +256,6 @@ private:
 
 	bool ruler_tool_active = false;
 	Point2 ruler_tool_origin;
-	real_t ruler_width_scaled = 16.0;
-	int ruler_font_size = 8;
 	Point2 node_create_position;
 
 	MenuOption last_option;

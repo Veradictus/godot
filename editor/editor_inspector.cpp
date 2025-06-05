@@ -48,6 +48,7 @@
 #include "editor/multi_node_edit.h"
 #include "editor/plugins/script_editor_plugin.h"
 #include "editor/themes/editor_scale.h"
+#include "editor/themes/editor_theme_manager.h"
 #include "scene/gui/margin_container.h"
 #include "scene/gui/separator.h"
 #include "scene/gui/spin_box.h"
@@ -1295,9 +1296,6 @@ void EditorProperty::menu_option(int p_option) {
 		case MENU_COPY_PROPERTY_PATH: {
 			DisplayServer::get_singleton()->clipboard_set(property_path);
 		} break;
-		case MENU_OVERRIDE_FOR_PROJECT: {
-			emit_signal(SNAME("property_overridden"));
-		} break;
 		case MENU_FAVORITE_PROPERTY: {
 			emit_signal(SNAME("property_favorited"), property, !favorited);
 			queue_redraw();
@@ -1398,7 +1396,6 @@ void EditorProperty::_bind_methods() {
 	ADD_SIGNAL(MethodInfo("property_deleted", PropertyInfo(Variant::STRING_NAME, "property")));
 	ADD_SIGNAL(MethodInfo("property_keyed_with_value", PropertyInfo(Variant::STRING_NAME, "property"), PropertyInfo(Variant::NIL, "value", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NIL_IS_VARIANT)));
 	ADD_SIGNAL(MethodInfo("property_checked", PropertyInfo(Variant::STRING_NAME, "property"), PropertyInfo(Variant::BOOL, "checked")));
-	ADD_SIGNAL(MethodInfo("property_overridden"));
 	ADD_SIGNAL(MethodInfo("property_favorited", PropertyInfo(Variant::STRING_NAME, "property"), PropertyInfo(Variant::BOOL, "favorited")));
 	ADD_SIGNAL(MethodInfo("property_pinned", PropertyInfo(Variant::STRING_NAME, "property"), PropertyInfo(Variant::BOOL, "pinned")));
 	ADD_SIGNAL(MethodInfo("property_can_revert_changed", PropertyInfo(Variant::STRING_NAME, "property"), PropertyInfo(Variant::BOOL, "can_revert")));
@@ -1465,13 +1462,10 @@ void EditorProperty::_update_popup() {
 		}
 		menu->set_item_tooltip(menu->get_item_index(MENU_PIN_VALUE), TTR("Pinning a value forces it to be saved even if it's equal to the default."));
 	}
-	if (deletable || can_revert || can_override) {
+	if (deletable || can_revert) {
 		menu->add_separator();
-		if (can_override) {
-			menu->add_icon_item(get_editor_theme_icon(SNAME("Override")), TTRC("Override for Project"), MENU_OVERRIDE_FOR_PROJECT);
-		}
 		if (deletable) {
-			menu->add_icon_item(get_editor_theme_icon(SNAME("Remove")), TTR("Delete Property"), MENU_DELETE);
+			menu->add_icon_item(get_editor_theme_icon(SNAME("Remove")), TTR("Delete Property"), MENU_PIN_VALUE);
 		}
 		if (can_revert) {
 			menu->add_icon_item(get_editor_theme_icon(SNAME("Reload")), TTR("Revert Value"), MENU_REVERT_VALUE);
@@ -1553,17 +1547,6 @@ void EditorInspectorPlugin::_bind_methods() {
 ////////////////////////////////////////////////
 ////////////////////////////////////////////////
 
-static Ref<Script> _get_category_script(const PropertyInfo &p_info) {
-	if (!p_info.hint_string.is_empty() && !EditorNode::get_editor_data().is_type_recognized(p_info.name) && ResourceLoader::exists(p_info.hint_string, "Script")) {
-		return ResourceLoader::load(p_info.hint_string, "Script");
-	}
-	return Ref<Script>();
-}
-
-void EditorInspectorCategory::_bind_methods() {
-	ADD_SIGNAL(MethodInfo("unfavorite_all"));
-}
-
 void EditorInspectorCategory::_notification(int p_what) {
 	switch (p_what) {
 		case NOTIFICATION_ACCESSIBILITY_UPDATE: {
@@ -1580,17 +1563,14 @@ void EditorInspectorCategory::_notification(int p_what) {
 		} break;
 
 		case NOTIFICATION_THEME_CHANGED: {
-			menu_icon_dirty = true;
-			_update_icon();
-		} break;
-
-		case NOTIFICATION_TRANSLATION_CHANGED: {
-			if (is_favorite) {
-				label = TTR("Favorites");
+			if (menu) {
+				if (is_favorite) {
+					menu->set_item_icon(menu->get_item_index(EditorInspector::MENU_UNFAVORITE_ALL), get_editor_theme_icon(SNAME("Unfavorite")));
+				} else {
+					menu->set_item_icon(menu->get_item_index(MENU_OPEN_DOCS), get_editor_theme_icon(SNAME("Help")));
+				}
 			}
-			queue_accessibility_update();
 		} break;
-
 		case NOTIFICATION_DRAW: {
 			Ref<StyleBox> sb = get_theme_stylebox(SNAME("bg"));
 
@@ -1636,7 +1616,19 @@ void EditorInspectorCategory::_notification(int p_what) {
 }
 
 void EditorInspectorCategory::_accessibility_action_menu(const Variant &p_data) {
-	_popup_context_menu(get_screen_position());
+	if (!is_favorite) {
+		if (!menu) {
+			menu = memnew(PopupMenu);
+			menu->add_icon_item(get_editor_theme_icon(SNAME("Help")), TTR("Open Documentation"), MENU_OPEN_DOCS);
+			add_child(menu);
+			menu->connect(SceneStringName(id_pressed), callable_mp(this, &EditorInspectorCategory::_handle_menu_option));
+		}
+		menu->set_item_disabled(menu->get_item_index(MENU_OPEN_DOCS), !EditorHelp::get_doc_data()->class_list.has(doc_class_name));
+	}
+
+	menu->set_position(get_screen_position());
+	menu->reset_size();
+	menu->popup();
 }
 
 Control *EditorInspectorCategory::make_custom_tooltip(const String &p_text) const {
@@ -1648,29 +1640,13 @@ Control *EditorInspectorCategory::make_custom_tooltip(const String &p_text) cons
 	return EditorHelpBitTooltip::show_tooltip(const_cast<EditorInspectorCategory *>(this), p_text);
 }
 
-void EditorInspectorCategory::set_as_favorite() {
+void EditorInspectorCategory::set_as_favorite(EditorInspector *p_for_inspector) {
 	is_favorite = true;
-	_update_icon();
-}
 
-void EditorInspectorCategory::set_property_info(const PropertyInfo &p_info) {
-	info = p_info;
-
-	Ref<Script> scr = _get_category_script(info);
-	if (scr.is_valid()) {
-		StringName script_name = EditorNode::get_editor_data().script_class_get_name(scr->get_path());
-		if (script_name != StringName()) {
-			label = script_name;
-		}
-	}
-	if (label.is_empty()) {
-		label = info.name;
-	}
-	_update_icon();
-}
-
-void EditorInspectorCategory::set_doc_class_name(const String &p_name) {
-	doc_class_name = p_name;
+	menu = memnew(PopupMenu);
+	menu->add_item(TTR("Unfavorite All"), EditorInspector::MENU_UNFAVORITE_ALL);
+	add_child(menu);
+	menu->connect(SceneStringName(id_pressed), callable_mp(p_for_inspector, &EditorInspector::_handle_menu_option));
 }
 
 Size2 EditorInspectorCategory::get_minimum_size() const {
@@ -1693,77 +1669,36 @@ Size2 EditorInspectorCategory::get_minimum_size() const {
 
 void EditorInspectorCategory::_handle_menu_option(int p_option) {
 	switch (p_option) {
-		case MENU_OPEN_DOCS: {
+		case MENU_OPEN_DOCS:
 			ScriptEditor::get_singleton()->goto_help("class:" + doc_class_name);
 			EditorNode::get_singleton()->get_editor_main_screen()->select(EditorMainScreen::EDITOR_SCRIPT);
-		} break;
-
-		case MENU_UNFAVORITE_ALL: {
-			emit_signal(SNAME("unfavorite_all"));
-		} break;
-	}
-}
-
-void EditorInspectorCategory::_popup_context_menu(const Point2i &p_position) {
-	if (!is_favorite && doc_class_name.is_empty()) {
-		return;
-	}
-
-	if (menu == nullptr) {
-		menu = memnew(PopupMenu);
-
-		if (is_favorite) {
-			menu->add_item(TTRC("Unfavorite All"), MENU_UNFAVORITE_ALL);
-		} else {
-			menu->add_item(TTRC("Open Documentation"), MENU_OPEN_DOCS);
-			menu->set_item_disabled(-1, !EditorHelp::get_doc_data()->class_list.has(doc_class_name));
-		}
-
-		menu->connect(SceneStringName(id_pressed), callable_mp(this, &EditorInspectorCategory::_handle_menu_option));
-		add_child(menu);
-	}
-
-	if (menu_icon_dirty) {
-		if (is_favorite) {
-			menu->set_item_icon(menu->get_item_index(MENU_UNFAVORITE_ALL), get_editor_theme_icon(SNAME("Unfavorite")));
-		} else {
-			menu->set_item_icon(menu->get_item_index(MENU_OPEN_DOCS), get_editor_theme_icon(SNAME("Help")));
-		}
-		menu_icon_dirty = false;
-	}
-
-	menu->set_position(p_position);
-	menu->reset_size();
-	menu->popup();
-}
-
-void EditorInspectorCategory::_update_icon() {
-	if (is_favorite) {
-		icon = get_editor_theme_icon(SNAME("Favorites"));
-		return;
-	}
-
-	icon = Ref<Texture2D>();
-
-	Ref<Script> scr = _get_category_script(info);
-	if (scr.is_valid()) {
-		StringName script_name = EditorNode::get_editor_data().script_class_get_name(scr->get_path());
-		if (script_name == StringName()) {
-			icon = EditorNode::get_singleton()->get_object_icon(scr.ptr(), "Object");
-		} else {
-			icon = EditorNode::get_singleton()->get_class_icon(script_name);
-		}
-	}
-	if (icon.is_null() && !info.name.is_empty()) {
-		icon = EditorNode::get_singleton()->get_class_icon(info.name);
+			break;
 	}
 }
 
 void EditorInspectorCategory::gui_input(const Ref<InputEvent> &p_event) {
-	const Ref<InputEventMouseButton> &mb = p_event;
-	if (mb.is_valid() && mb->is_pressed() && mb->get_button_index() == MouseButton::RIGHT) {
-		_popup_context_menu(get_screen_position() + mb->get_position());
+	if (!is_favorite && doc_class_name.is_empty()) {
+		return;
 	}
+
+	const Ref<InputEventMouseButton> &mb_event = p_event;
+	if (mb_event.is_null() || !mb_event->is_pressed() || mb_event->get_button_index() != MouseButton::RIGHT) {
+		return;
+	}
+
+	if (!is_favorite) {
+		if (!menu) {
+			menu = memnew(PopupMenu);
+			menu->add_icon_item(get_editor_theme_icon(SNAME("Help")), TTR("Open Documentation"), MENU_OPEN_DOCS);
+			add_child(menu);
+			menu->connect(SceneStringName(id_pressed), callable_mp(this, &EditorInspectorCategory::_handle_menu_option));
+		}
+		menu->set_item_disabled(menu->get_item_index(MENU_OPEN_DOCS), !EditorHelp::get_doc_data()->class_list.has(doc_class_name));
+	}
+
+	menu->set_position(get_screen_position() + mb_event->get_position());
+	menu->reset_size();
+	menu->popup();
 }
 
 EditorInspectorCategory::EditorInspectorCategory() {
@@ -3672,13 +3607,17 @@ void EditorInspector::update_tree() {
 				continue; // Empty, ignore it.
 			}
 
+			String category_label;
 			String category_tooltip;
+			Ref<Texture> category_icon;
 
 			// Do not add an icon, do not change the current class (`doc_name`) for custom categories.
 			if (is_custom_category) {
+				category_label = p.name;
 				category_tooltip = p.name;
 			} else {
 				doc_name = p.name;
+				category_label = p.name;
 
 				// Use category's owner script to update some of its information.
 				if (!EditorNode::get_editor_data().is_type_recognized(p.name) && ResourceLoader::exists(p.hint_string, "Script")) {
@@ -3686,11 +3625,23 @@ void EditorInspector::update_tree() {
 					if (scr.is_valid()) {
 						doc_name = scr->get_doc_class_name();
 
+						StringName script_name = EditorNode::get_editor_data().script_class_get_name(scr->get_path());
+						if (script_name != StringName()) {
+							category_label = script_name;
+							category_icon = EditorNode::get_singleton()->get_class_icon(script_name);
+						} else {
+							category_icon = EditorNode::get_singleton()->get_object_icon(scr.ptr(), "Object");
+						}
+
 						// Property favorites aren't compatible with built-in scripts.
 						if (scr->is_built_in()) {
 							disable_favorite = true;
 						}
 					}
+				}
+
+				if (category_icon.is_null() && !p.name.is_empty()) {
+					category_icon = EditorNode::get_singleton()->get_class_icon(p.name);
 				}
 
 				if (use_doc_hints) {
@@ -3710,14 +3661,15 @@ void EditorInspector::update_tree() {
 
 			// Create an EditorInspectorCategory and add it to the inspector.
 			EditorInspectorCategory *category = memnew(EditorInspectorCategory);
-			category->set_property_info(p);
 			main_vbox->add_child(category);
 			category_vbox = nullptr; // Reset.
 
 			// Set the category info.
+			category->label = category_label;
 			category->set_tooltip_text(category_tooltip);
+			category->icon = category_icon;
 			if (!is_custom_category) {
-				category->set_doc_class_name(doc_name);
+				category->doc_class_name = doc_name;
 			}
 
 			// Add editors at the start of a category.
@@ -4972,9 +4924,6 @@ void EditorInspector::_property_deleted(const String &p_path) {
 		undo_redo->commit_action();
 	}
 
-	if (restart_request_props.has(p_path)) {
-		emit_signal(SNAME("restart_requested"));
-	}
 	emit_signal(SNAME("property_deleted"), p_path);
 }
 
@@ -5280,6 +5229,8 @@ void EditorInspector::_notification(int p_what) {
 				break;
 			}
 
+			favorites_category->icon = get_editor_theme_icon(SNAME("Favorites"));
+
 			int separation = get_theme_constant(SNAME("v_separation"), SNAME("EditorInspector"));
 			base_vbox->add_theme_constant_override("separation", separation);
 			begin_vbox->add_theme_constant_override("separation", separation);
@@ -5464,6 +5415,14 @@ void EditorInspector::_add_meta_confirm() {
 	undo_redo->commit_action();
 }
 
+void EditorInspector::_handle_menu_option(int p_option) {
+	switch (p_option) {
+		case MENU_UNFAVORITE_ALL:
+			_clear_current_favorites();
+			break;
+	}
+}
+
 void EditorInspector::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("edit", "object"), &EditorInspector::edit);
 	ClassDB::bind_method("_edit_request_change", &EditorInspector::_edit_request_change);
@@ -5498,10 +5457,10 @@ EditorInspector::EditorInspector() {
 	base_vbox->add_child(favorites_section);
 	favorites_section->hide();
 
-	EditorInspectorCategory *favorites_category = memnew(EditorInspectorCategory);
-	favorites_category->set_as_favorite();
-	favorites_category->connect("unfavorite_all", callable_mp(this, &EditorInspector::_clear_current_favorites));
+	favorites_category = memnew(EditorInspectorCategory);
+	favorites_category->set_as_favorite(this);
 	favorites_section->add_child(favorites_category);
+	favorites_category->label = TTR("Favorites");
 
 	favorites_vbox = memnew(VBoxContainer);
 	favorites_section->add_child(favorites_vbox);
