@@ -1200,31 +1200,27 @@ Error EditorExportPlatform::export_project_files(const Ref<EditorExportPreset> &
 		}
 	};
 
-	auto add_shared_objects_and_extra_files_from_export_plugins = [&]() {
-		for (int i = 0; i < export_plugins.size(); i++) {
-			if (p_so_func) {
-				for (int j = 0; j < export_plugins[i]->shared_objects.size(); j++) {
-					err = p_so_func(p_udata, export_plugins[i]->shared_objects[j]);
-					if (err != OK) {
-						return err;
-					}
-				}
-			}
-			for (int j = 0; j < export_plugins[i]->extra_files.size(); j++) {
-				err = save_proxy.save_file(p_udata, export_plugins[i]->extra_files[j].path, export_plugins[i]->extra_files[j].data, 0, paths.size(), enc_in_filters, enc_ex_filters, key, seed);
+	// Always sort by name, to so if for some reason they are re-arranged, it still works.
+	export_plugins.sort_custom<SortByName>();
+
+	for (int i = 0; i < export_plugins.size(); i++) {
+		if (p_so_func) {
+			for (int j = 0; j < export_plugins[i]->shared_objects.size(); j++) {
+				err = p_so_func(p_udata, export_plugins[i]->shared_objects[j]);
 				if (err != OK) {
 					return err;
 				}
 			}
-
-			export_plugins.write[i]->_clear();
+		}
+		for (int j = 0; j < export_plugins[i]->extra_files.size(); j++) {
+			err = save_proxy.save_file(p_udata, export_plugins[i]->extra_files[j].path, export_plugins[i]->extra_files[j].data, 0, paths.size(), enc_in_filters, enc_ex_filters, key, seed);
+			if (err != OK) {
+				return err;
+			}
 		}
 
-		return OK;
-	};
-
-	// Always sort by name, to so if for some reason they are re-arranged, it still works.
-	export_plugins.sort_custom<SortByName>();
+		export_plugins.write[i]->_clear();
+	}
 
 	HashSet<String> features = get_features(p_preset, p_debug);
 	PackedStringArray features_psa;
@@ -1256,12 +1252,6 @@ Error EditorExportPlatform::export_project_files(const Ref<EditorExportPreset> &
 		}
 	}
 
-	// Add any files that might've been defined during the initial steps of the export plugins.
-	err = add_shared_objects_and_extra_files_from_export_plugins();
-	if (err != OK) {
-		return err;
-	}
-
 	HashMap<String, FileExportCache> export_cache;
 	String export_base_path = ProjectSettings::get_singleton()->get_project_data_path().path_join("exported/") + itos(custom_resources_hash);
 
@@ -1291,10 +1281,6 @@ Error EditorExportPlatform::export_project_files(const Ref<EditorExportPreset> &
 			d->change_dir(ProjectSettings::get_singleton()->get_project_data_path());
 			d->make_dir_recursive("exported/" + itos(custom_resources_hash));
 		}
-	}
-
-	for (int i = 0; i < export_plugins.size(); i++) {
-		export_plugins.write[i]->set_export_base_path(export_base_path);
 	}
 
 	//store everything in the export medium
@@ -1535,13 +1521,6 @@ Error EditorExportPlatform::export_project_files(const Ref<EditorExportPreset> &
 			plugin->_end_customize_scenes();
 		}
 	}
-
-	// Add any files that might've been defined during the final steps of the export plugins.
-	err = add_shared_objects_and_extra_files_from_export_plugins();
-	if (err != OK) {
-		return err;
-	}
-
 	//save config!
 
 	Vector<String> custom_list;

@@ -1360,35 +1360,26 @@ void TabBar::remove_tab(int p_idx) {
 }
 
 Variant TabBar::get_drag_data(const Point2 &p_point) {
-	Variant drag_data = Control::get_drag_data(p_point);
-	if (drag_data != Variant()) {
-		return drag_data;
+	if (!drag_to_rearrange_enabled) {
+		return Control::get_drag_data(p_point); // Allow stuff like TabContainer to override it.
 	}
-
-	if (drag_to_rearrange_enabled) {
-		return _handle_get_drag_data("tab_bar_tab", p_point);
-	}
-	return Variant();
+	return _handle_get_drag_data("tab_bar_tab", p_point);
 }
 
 bool TabBar::can_drop_data(const Point2 &p_point, const Variant &p_data) const {
-	bool drop_override = Control::can_drop_data(p_point, p_data);
-	if (drop_override) {
-		return drop_override;
+	if (!drag_to_rearrange_enabled) {
+		return Control::can_drop_data(p_point, p_data); // Allow stuff like TabContainer to override it.
 	}
-
-	if (drag_to_rearrange_enabled) {
-		return _handle_can_drop_data("tab_bar_tab", p_point, p_data);
-	}
-	return false;
+	return _handle_can_drop_data("tab_bar_tab", p_point, p_data);
 }
 
 void TabBar::drop_data(const Point2 &p_point, const Variant &p_data) {
-	Control::drop_data(p_point, p_data);
-
-	if (drag_to_rearrange_enabled) {
-		_handle_drop_data("tab_bar_tab", p_point, p_data, callable_mp(this, &TabBar::move_tab), callable_mp(this, &TabBar::_move_tab_from));
+	if (!drag_to_rearrange_enabled) {
+		Control::drop_data(p_point, p_data); // Allow stuff like TabContainer to override it.
+		return;
 	}
+
+	_handle_drop_data("tab_bar_tab", p_point, p_data, callable_mp(this, &TabBar::move_tab), callable_mp(this, &TabBar::_move_tab_from));
 }
 
 Variant TabBar::_handle_get_drag_data(const String &p_type, const Point2 &p_point) {
