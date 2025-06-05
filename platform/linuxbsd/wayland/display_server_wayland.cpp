@@ -576,9 +576,9 @@ int DisplayServerWayland::get_primary_screen() const {
 Point2i DisplayServerWayland::screen_get_position(int p_screen) const {
 	MutexLock mutex_lock(wayland_thread.mutex);
 
-	p_screen = _get_screen_index(p_screen);
-	int screen_count = get_screen_count();
-	ERR_FAIL_INDEX_V(p_screen, screen_count, Point2i());
+	if (p_screen == SCREEN_OF_MAIN_WINDOW) {
+		p_screen = window_get_current_screen();
+	}
 
 	return wayland_thread.screen_get_data(p_screen).position;
 }
@@ -586,27 +586,24 @@ Point2i DisplayServerWayland::screen_get_position(int p_screen) const {
 Size2i DisplayServerWayland::screen_get_size(int p_screen) const {
 	MutexLock mutex_lock(wayland_thread.mutex);
 
-	p_screen = _get_screen_index(p_screen);
-	int screen_count = get_screen_count();
-	ERR_FAIL_INDEX_V(p_screen, screen_count, Size2i());
+	if (p_screen == SCREEN_OF_MAIN_WINDOW) {
+		p_screen = window_get_current_screen();
+	}
 
 	return wayland_thread.screen_get_data(p_screen).size;
 }
 
 Rect2i DisplayServerWayland::screen_get_usable_rect(int p_screen) const {
-	p_screen = _get_screen_index(p_screen);
-	int screen_count = get_screen_count();
-	ERR_FAIL_INDEX_V(p_screen, screen_count, Rect2i());
-
-	return Rect2i(screen_get_position(p_screen), screen_get_size(p_screen));
+	// Unsupported on wayland.
+	return Rect2i(Point2i(), screen_get_size(p_screen));
 }
 
 int DisplayServerWayland::screen_get_dpi(int p_screen) const {
 	MutexLock mutex_lock(wayland_thread.mutex);
 
-	p_screen = _get_screen_index(p_screen);
-	int screen_count = get_screen_count();
-	ERR_FAIL_INDEX_V(p_screen, screen_count, 96);
+	if (p_screen == SCREEN_OF_MAIN_WINDOW) {
+		p_screen = window_get_current_screen();
+	}
 
 	const WaylandThread::ScreenData &data = wayland_thread.screen_get_data(p_screen);
 
@@ -639,19 +636,15 @@ float DisplayServerWayland::screen_get_scale(int p_screen) const {
 		return wayland_thread.window_state_get_scale_factor(ws);
 	}
 
-	p_screen = _get_screen_index(p_screen);
-	int screen_count = get_screen_count();
-	ERR_FAIL_INDEX_V(p_screen, screen_count, 1.0f);
-
 	return wayland_thread.screen_get_data(p_screen).scale;
 }
 
 float DisplayServerWayland::screen_get_refresh_rate(int p_screen) const {
 	MutexLock mutex_lock(wayland_thread.mutex);
 
-	p_screen = _get_screen_index(p_screen);
-	int screen_count = get_screen_count();
-	ERR_FAIL_INDEX_V(p_screen, screen_count, SCREEN_REFRESH_RATE_FALLBACK);
+	if (p_screen == SCREEN_OF_MAIN_WINDOW) {
+		p_screen = window_get_current_screen();
+	}
 
 	return wayland_thread.screen_get_data(p_screen).refresh_rate;
 }
@@ -1049,7 +1042,6 @@ void DisplayServerWayland::window_set_drop_files_callback(const Callable &p_call
 }
 
 int DisplayServerWayland::window_get_current_screen(DisplayServer::WindowID p_window_id) const {
-	ERR_FAIL_COND_V(p_window_id != MAIN_WINDOW_ID, INVALID_SCREEN);
 	// Standard Wayland APIs don't support getting the screen of a window.
 	return 0;
 }

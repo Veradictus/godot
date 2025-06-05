@@ -318,7 +318,6 @@ public:
 	virtual Rect2i get_display_safe_area() const { return screen_get_usable_rect(); }
 
 	enum {
-		INVALID_SCREEN = -1,
 		SCREEN_WITH_MOUSE_FOCUS = -4,
 		SCREEN_WITH_KEYBOARD_FOCUS = -3,
 		SCREEN_PRIMARY = -2,
@@ -602,6 +601,7 @@ public:
 	};
 
 	enum AccessibilityPopupType {
+		POPUP_UNKNOWN,
 		POPUP_MENU,
 		POPUP_LIST,
 		POPUP_TREE,
@@ -610,6 +610,7 @@ public:
 
 	enum AccessibilityFlags {
 		FLAG_HIDDEN,
+		FLAG_LINKED,
 		FLAG_MULTISELECTABLE,
 		FLAG_REQUIRED,
 		FLAG_VISITED,

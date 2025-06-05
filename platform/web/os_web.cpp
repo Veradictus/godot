@@ -180,9 +180,9 @@ String OS_Web::get_name() const {
 	return "Web";
 }
 
-void OS_Web::add_frame_delay(bool p_can_draw, bool p_wake_for_events) {
+void OS_Web::add_frame_delay(bool p_can_draw) {
 #ifndef PROXY_TO_PTHREAD_ENABLED
-	OS::add_frame_delay(p_can_draw, p_wake_for_events);
+	OS::add_frame_delay(p_can_draw);
 #endif
 }
 

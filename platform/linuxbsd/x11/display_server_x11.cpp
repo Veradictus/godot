@@ -1206,8 +1206,7 @@ Rect2i DisplayServerX11::_screen_get_rect(int p_screen) const {
 	Rect2i rect(0, 0, 0, 0);
 
 	p_screen = _get_screen_index(p_screen);
-	int screen_count = get_screen_count();
-	ERR_FAIL_INDEX_V(p_screen, screen_count, Rect2i());
+	ERR_FAIL_COND_V(p_screen < 0, rect);
 
 	// Using Xinerama Extension.
 	bool found = false;
@@ -1295,7 +1294,9 @@ Rect2i DisplayServerX11::screen_get_usable_rect(int p_screen) const {
 
 	p_screen = _get_screen_index(p_screen);
 	int screen_count = get_screen_count();
-	ERR_FAIL_INDEX_V(p_screen, screen_count, Rect2i());
+
+	// Check if screen is valid.
+	ERR_FAIL_INDEX_V(p_screen, screen_count, Rect2i(0, 0, 0, 0));
 
 	bool is_multiscreen = screen_count > 1;
 
@@ -1599,8 +1600,7 @@ int DisplayServerX11::screen_get_dpi(int p_screen) const {
 	_THREAD_SAFE_METHOD_
 
 	p_screen = _get_screen_index(p_screen);
-	int screen_count = get_screen_count();
-	ERR_FAIL_INDEX_V(p_screen, screen_count, 96);
+	ERR_FAIL_INDEX_V(p_screen, get_screen_count(), 0);
 
 	//Get physical monitor Dimensions through XRandR and calculate dpi
 	Size2i sc = screen_get_size(p_screen);
@@ -1677,9 +1677,18 @@ Color DisplayServerX11::screen_get_pixel(const Point2i &p_position) const {
 Ref<Image> DisplayServerX11::screen_get_image(int p_screen) const {
 	ERR_FAIL_INDEX_V(p_screen, get_screen_count(), Ref<Image>());
 
-	p_screen = _get_screen_index(p_screen);
-	int screen_count = get_screen_count();
-	ERR_FAIL_INDEX_V(p_screen, screen_count, Ref<Image>());
+	switch (p_screen) {
+		case SCREEN_PRIMARY: {
+			p_screen = get_primary_screen();
+		} break;
+		case SCREEN_OF_MAIN_WINDOW: {
+			p_screen = window_get_current_screen(MAIN_WINDOW_ID);
+		} break;
+		default:
+			break;
+	}
+
+	ERR_FAIL_COND_V(p_screen < 0, Ref<Image>());
 
 	if (xwayland) {
 		return Ref<Image>();
@@ -1785,8 +1794,7 @@ float DisplayServerX11::screen_get_refresh_rate(int p_screen) const {
 	_THREAD_SAFE_METHOD_
 
 	p_screen = _get_screen_index(p_screen);
-	int screen_count = get_screen_count();
-	ERR_FAIL_INDEX_V(p_screen, screen_count, SCREEN_REFRESH_RATE_FALLBACK);
+	ERR_FAIL_INDEX_V(p_screen, get_screen_count(), SCREEN_REFRESH_RATE_FALLBACK);
 
 	//Use xrandr to get screen refresh rate.
 	if (xrandr_ext_ok) {
@@ -2237,7 +2245,7 @@ int DisplayServerX11::window_get_current_screen(WindowID p_window) const {
 		return 0;
 	}
 
-	ERR_FAIL_COND_V(!windows.has(p_window), INVALID_SCREEN);
+	ERR_FAIL_COND_V(!windows.has(p_window), 0);
 	const WindowData &wd = windows[p_window];
 
 	const Rect2i window_rect(wd.position, wd.size);
@@ -2273,15 +2281,14 @@ void DisplayServerX11::window_set_current_screen(int p_screen, WindowID p_window
 	_THREAD_SAFE_METHOD_
 
 	ERR_FAIL_COND(!windows.has(p_window));
+	WindowData &wd = windows[p_window];
 
 	p_screen = _get_screen_index(p_screen);
-	int screen_count = get_screen_count();
-	ERR_FAIL_INDEX(p_screen, screen_count);
+	ERR_FAIL_INDEX(p_screen, get_screen_count());
 
 	if (window_get_current_screen(p_window) == p_screen) {
 		return;
 	}
-	WindowData &wd = windows[p_window];
 
 	if (wd.embed_parent) {
 		print_line("Embedded window can't be moved to another screen.");

@@ -194,8 +194,6 @@ void MenuButton::_bind_methods() {
 
 	ADD_SIGNAL(MethodInfo("about_to_popup"));
 
-	ADD_CLASS_DEPENDENCY("PopupMenu");
-
 	PopupMenu::Item defaults(true);
 
 	base_property_helper.set_prefix("popup/item_");

@@ -120,6 +120,7 @@ class JoltContactListener3D final
 
 	void _flush_contacts();
 	void _flush_area_enters();
+	void _flush_area_shifts();
 	void _flush_area_exits();
 
 public:

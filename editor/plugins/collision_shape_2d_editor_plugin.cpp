@@ -184,8 +184,7 @@ void CollisionShape2DEditor::set_handle(int idx, Point2 &p_point) {
 					Vector2 normal = world_boundary->get_normal();
 					world_boundary->set_distance(p_point.dot(normal) / normal.length_squared());
 				} else {
-					real_t dir = world_boundary->get_distance() < 0 ? -1 : 1;
-					world_boundary->set_normal(p_point.normalized() * dir);
+					world_boundary->set_normal(p_point.normalized());
 				}
 			}
 		} break;

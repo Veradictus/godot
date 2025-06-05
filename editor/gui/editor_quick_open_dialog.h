@@ -30,7 +30,7 @@
 
 #pragma once
 
-#include "core/templates/a_hash_map.h"
+#include "core/templates/oa_hash_map.h"
 #include "scene/gui/dialogs.h"
 #include "scene/gui/margin_container.h"
 
@@ -111,10 +111,10 @@ private:
 	Vector<FuzzySearchResult> search_results;
 	Vector<StringName> base_types;
 	Vector<String> filepaths;
-	AHashMap<String, StringName> filetypes;
+	OAHashMap<String, StringName> filetypes;
 	Vector<QuickOpenResultCandidate> candidates;
 
-	AHashMap<StringName, Vector<QuickOpenResultCandidate>> selected_history;
+	OAHashMap<StringName, Vector<QuickOpenResultCandidate>> selected_history;
 	HashSet<String> history_set;
 
 	String query;
@@ -142,7 +142,7 @@ private:
 	CheckButton *include_addons_toggle = nullptr;
 	CheckButton *fuzzy_search_toggle = nullptr;
 
-	AHashMap<StringName, Ref<Texture2D>> file_type_icons;
+	OAHashMap<StringName, Ref<Texture2D>> file_type_icons;
 
 	static QuickOpenDisplayMode get_adaptive_display_mode(const Vector<StringName> &p_base_types);
 
