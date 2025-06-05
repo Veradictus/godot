@@ -2537,13 +2537,7 @@ void DisplayServerMacOS::window_set_mode(WindowMode p_mode, WindowID p_window) {
 		} break;
 		case WINDOW_MODE_MAXIMIZED: {
 			if (NSEqualRects([wd.window_object frame], [[wd.window_object screen] visibleFrame])) {
-				if (wd.borderless) {
-					if (wd.pre_zoom_rect.size.width > 0 && wd.pre_zoom_rect.size.height > 0) {
-						[wd.window_object setFrame:wd.pre_zoom_rect display:NO animate:YES];
-					}
-				} else {
-					[wd.window_object zoom:nil];
-				}
+				[wd.window_object zoom:nil];
 			}
 		} break;
 	}
@@ -2576,12 +2570,7 @@ void DisplayServerMacOS::window_set_mode(WindowMode p_mode, WindowID p_window) {
 		} break;
 		case WINDOW_MODE_MAXIMIZED: {
 			if (!NSEqualRects([wd.window_object frame], [[wd.window_object screen] visibleFrame])) {
-				wd.pre_zoom_rect = [wd.window_object frame];
-				if (wd.borderless) {
-					[wd.window_object setFrame:[[wd.window_object screen] visibleFrame] display:NO animate:YES];
-				} else {
-					[wd.window_object zoom:nil];
-				}
+				[wd.window_object zoom:nil];
 			}
 		} break;
 	}
@@ -2781,7 +2770,6 @@ void DisplayServerMacOS::window_set_flag(WindowFlags p_flag, bool p_enabled, Win
 				[wd.window_object orderOut:nil];
 			}
 			wd.borderless = p_enabled;
-			bool was_maximized = (NSEqualRects([wd.window_object frame], [[wd.window_object screen] visibleFrame]));
 			if (p_enabled) {
 				[wd.window_object setStyleMask:NSWindowStyleMaskBorderless];
 				[wd.window_object setHasShadow:NO];
@@ -2811,9 +2799,6 @@ void DisplayServerMacOS::window_set_flag(WindowFlags p_flag, bool p_enabled, Win
 				} else {
 					[wd.window_object makeKeyAndOrderFront:nil];
 				}
-			}
-			if (was_maximized) {
-				[wd.window_object setFrame:[[wd.window_object screen] visibleFrame] display:NO];
 			}
 		} break;
 		case WINDOW_FLAG_ALWAYS_ON_TOP: {

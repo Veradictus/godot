@@ -128,22 +128,28 @@ layout(location = 9) out highp float dp_clip;
 #endif
 
 #ifdef USE_MULTIVIEW
-#extension GL_EXT_multiview : enable
+#ifdef has_VK_KHR_multiview
 #define ViewIndex gl_ViewIndex
+#else
+// !BAS! This needs to become an input once we implement our fallback!
+#define ViewIndex 0
+#endif
 vec3 multiview_uv(vec2 uv) {
 	return vec3(uv, ViewIndex);
 }
 ivec3 multiview_uv(ivec2 uv) {
 	return ivec3(uv, int(ViewIndex));
 }
-#else // USE_MULTIVIEW
+#else
+// Set to zero, not supported in non stereo
+#define ViewIndex 0
 vec2 multiview_uv(vec2 uv) {
 	return uv;
 }
 ivec2 multiview_uv(ivec2 uv) {
 	return uv;
 }
-#endif // !USE_MULTIVIEW
+#endif //USE_MULTIVIEW
 
 invariant gl_Position;
 
@@ -706,22 +712,28 @@ vec4 textureArray_bicubic(texture2DArray tex, vec3 uv, vec2 texture_size) {
 #endif //USE_LIGHTMAP
 
 #ifdef USE_MULTIVIEW
-#extension GL_EXT_multiview : enable
+#ifdef has_VK_KHR_multiview
 #define ViewIndex gl_ViewIndex
+#else
+// !BAS! This needs to become an input once we implement our fallback!
+#define ViewIndex 0
+#endif
 vec3 multiview_uv(vec2 uv) {
 	return vec3(uv, ViewIndex);
 }
 ivec3 multiview_uv(ivec2 uv) {
 	return ivec3(uv, int(ViewIndex));
 }
-#else // USE_MULTIVIEW
+#else
+// Set to zero, not supported in non stereo
+#define ViewIndex 0
 vec2 multiview_uv(vec2 uv) {
 	return uv;
 }
 ivec2 multiview_uv(ivec2 uv) {
 	return uv;
 }
-#endif // !USE_MULTIVIEW
+#endif //USE_MULTIVIEW
 
 //defines to keep compatibility with vertex
 

@@ -4,6 +4,12 @@
 
 #VERSION_DEFINES
 
+#ifdef USE_MULTIVIEW
+#ifdef has_VK_KHR_multiview
+#extension GL_EXT_multiview : enable
+#endif
+#endif
+
 layout(location = 0) out vec2 uv_interp;
 
 void main() {
@@ -32,8 +38,12 @@ void main() {
 #VERSION_DEFINES
 
 #ifdef USE_MULTIVIEW
+#ifdef has_VK_KHR_multiview
 #extension GL_EXT_multiview : enable
 #define ViewIndex gl_ViewIndex
+#else // has_VK_KHR_multiview
+#define ViewIndex 0
+#endif // has_VK_KHR_multiview
 #endif //USE_MULTIVIEW
 
 layout(location = 0) in vec2 uv_interp;

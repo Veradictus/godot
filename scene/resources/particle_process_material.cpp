@@ -32,9 +32,8 @@
 
 #include "core/version.h"
 
-Mutex ParticleProcessMaterial::dirty_materials_mutex;
+Mutex ParticleProcessMaterial::material_mutex;
 SelfList<ParticleProcessMaterial>::List ParticleProcessMaterial::dirty_materials;
-Mutex ParticleProcessMaterial::shader_map_mutex;
 HashMap<ParticleProcessMaterial::MaterialKey, ParticleProcessMaterial::ShaderData, ParticleProcessMaterial::MaterialKey> ParticleProcessMaterial::shader_map;
 RBSet<String> ParticleProcessMaterial::min_max_properties;
 ParticleProcessMaterial::ShaderNames *ParticleProcessMaterial::shader_names = nullptr;
@@ -148,37 +147,26 @@ void ParticleProcessMaterial::finish_shaders() {
 }
 
 void ParticleProcessMaterial::_update_shader() {
-	if (!_is_initialized()) {
-		_mark_ready();
-	}
-
 	MaterialKey mk = _compute_key();
 	if (mk == current_key) {
 		return; // No update required in the end.
 	}
 
-	{
-		MutexLock lock(shader_map_mutex);
-		ShaderData *v = shader_map.getptr(current_key);
-		if (v) {
-			v->users--;
-			if (v->users == 0) {
-				// Deallocate shader, as it's no longer in use.
-				RS::get_singleton()->free(v->shader);
-				shader_map.erase(current_key);
-				shader_rid = RID();
-			}
+	if (shader_map.has(current_key)) {
+		shader_map[current_key].users--;
+		if (shader_map[current_key].users == 0) {
+			// Deallocate shader, as it's no longer in use.
+			RS::get_singleton()->free(shader_map[current_key].shader);
+			shader_map.erase(current_key);
 		}
+	}
 
-		current_key = mk;
+	current_key = mk;
 
-		v = shader_map.getptr(mk);
-		if (v) {
-			shader_rid = v->shader;
-			RS::get_singleton()->material_set_shader(_get_material(), shader_rid);
-			v->users++;
-			return;
-		}
+	if (shader_map.has(mk)) {
+		RS::get_singleton()->material_set_shader(_get_material(), shader_map[mk].shader);
+		shader_map[mk].users++;
+		return;
 	}
 
 	// No pre-existing shader, create one.
@@ -1188,34 +1176,19 @@ void ParticleProcessMaterial::_update_shader() {
 	code += "	}\n";
 	code += "}\n";
 
-	// We must create the shader outside the shader_map_mutex to avoid potential deadlocks with
-	// other tasks in the WorkerThreadPool simultaneously creating materials, which
-	// may also hold the shared shader_map_mutex lock.
-	RID new_shader = RS::get_singleton()->shader_create_from_code(code);
+	ShaderData shader_data;
+	shader_data.shader = RS::get_singleton()->shader_create();
+	shader_data.users = 1;
 
-	MutexLock lock(shader_map_mutex);
+	RS::get_singleton()->shader_set_code(shader_data.shader, code);
 
-	ShaderData *v = shader_map.getptr(mk);
-	if (unlikely(v)) {
-		// We raced and managed to create the same key concurrently, so we'll free the shader we just created,
-		// given we know it isn't used, and use the winner.
-		RS::get_singleton()->free(new_shader);
-	} else {
-		ShaderData shader_data;
-		shader_data.shader = new_shader;
-		// ShaderData will be inserted with a users count of 0, but we
-		// increment unconditionally outside this if block, whilst still under lock.
-		v = &shader_map.insert(mk, shader_data)->value;
-	}
+	shader_map[mk] = shader_data;
 
-	shader_rid = v->shader;
-	v->users++;
-
-	RS::get_singleton()->material_set_shader(_get_material(), shader_rid);
+	RS::get_singleton()->material_set_shader(_get_material(), shader_data.shader);
 }
 
 void ParticleProcessMaterial::flush_changes() {
-	MutexLock lock(dirty_materials_mutex);
+	MutexLock lock(material_mutex);
 
 	while (dirty_materials.first()) {
 		dirty_materials.first()->self()->_update_shader();
@@ -1228,7 +1201,7 @@ void ParticleProcessMaterial::_queue_shader_change() {
 		return;
 	}
 
-	MutexLock lock(dirty_materials_mutex);
+	MutexLock lock(material_mutex);
 
 	if (!element.in_list()) {
 		dirty_materials.add(&element);
@@ -1863,14 +1836,9 @@ double ParticleProcessMaterial::get_lifetime_randomness() const {
 	return lifetime_randomness;
 }
 
-RID ParticleProcessMaterial::get_rid() const {
-	const_cast<ParticleProcessMaterial *>(this)->_update_shader();
-	return Material::get_rid();
-}
-
 RID ParticleProcessMaterial::get_shader_rid() const {
-	const_cast<ParticleProcessMaterial *>(this)->_update_shader();
-	return shader_rid;
+	ERR_FAIL_COND_V(!shader_map.has(current_key), RID());
+	return shader_map[current_key].shader;
 }
 
 void ParticleProcessMaterial::_validate_property(PropertyInfo &p_property) const {
@@ -2435,11 +2403,13 @@ ParticleProcessMaterial::ParticleProcessMaterial() :
 	set_color(Color(1, 1, 1, 1));
 
 	current_key.invalid_key = 1;
+
+	_mark_initialized(callable_mp(this, &ParticleProcessMaterial::_queue_shader_change), callable_mp(this, &ParticleProcessMaterial::_update_shader));
 }
 
 ParticleProcessMaterial::~ParticleProcessMaterial() {
 	ERR_FAIL_NULL(RenderingServer::get_singleton());
-	MutexLock lock(shader_map_mutex);
+	MutexLock lock(material_mutex);
 
 	if (shader_map.has(current_key)) {
 		shader_map[current_key].users--;

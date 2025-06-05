@@ -76,9 +76,10 @@ class MFXSpatialEffect : public SpatialUpscaler {
 
 	PagedAllocator<CallbackArgs, true, 16> args_allocator;
 	static void callback(RDD *p_driver, RDD::CommandBufferID p_command_buffer, CallbackArgs *p_userdata);
+	String name = "MetalFX Spatial Upscale";
 
 public:
-	virtual const Span<char> get_label() const final { return "MetalFX Spatial Upscale"; }
+	virtual String get_label() const final { return name; }
 	virtual void ensure_context(Ref<RenderSceneBuffersRD> p_render_buffers) final;
 	virtual void process(Ref<RenderSceneBuffersRD> p_render_buffers, RID p_src, RID p_dst) final;
 
