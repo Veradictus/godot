@@ -42,10 +42,10 @@
 
 				var propertyInfo = new Godot.Collections.Dictionary
 				{
-					{"name", "category/propertyName"},
-					{"type", (int)Variant.Type.Int},
-					{"hint", (int)PropertyHint.Enum},
-					{"hint_string", "one,two,three"},
+					{ "name", "category/propertyName" },
+					{ "type", (int)Variant.Type.Int },
+					{ "hint", (int)PropertyHint.Enum },
+					{ "hint_string", "one,two,three" },
 				};
 
 				ProjectSettings.AddPropertyInfo(propertyInfo);
@@ -1645,6 +1645,14 @@
 			If [code]true[/code], text server break iteration rule sets, dictionaries and other optional data are included in the exported project.
 			[b]Note:[/b] "ICU / HarfBuzz / Graphite" text server data includes dictionaries for Burmese, Chinese, Japanese, Khmer, Lao and Thai as well as Unicode Standard Annex #29 and Unicode Standard Annex #14 word and line breaking rules. Data is about 4 MB large.
 			[b]Note:[/b] [TextServerFallback] does not use additional data.
+		</member>
+		<member name="internationalization/locale/line_breaking_strictness" type="int" setter="" getter="" default="0">
+			Default strictness of line-breaking rules. Can be overridden by adding [code]@lb={auto,loose,normal,strict}[/code] to the language code.
+			- [b]Auto[/b] ([code]0[/code]) - strictness is based on the length of the line.
+			- [b]Loose[/b] ([code]1[/code]) - the least restrictive set of line-breaking rules. Typically used for short lines.
+			- [b]Normal[/b] ([code]2[/code]) - the most common set of line-breaking rules.
+			- [b]Strict[/b] ([code]3[/code]) - the most stringent set of line-breaking rules.
+			See [url=https://www.w3.org/TR/css-text-3/#line-break-property]Line Breaking Strictness: the line-break property[/url] for more info.
 		</member>
 		<member name="internationalization/locale/test" type="String" setter="" getter="" default="&quot;&quot;">
 			If non-empty, this locale will be used instead of the automatically detected system locale.
