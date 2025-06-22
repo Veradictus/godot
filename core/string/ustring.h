@@ -180,6 +180,7 @@ public:
 	_FORCE_INLINE_ const T *get_data() const { return ptr() ? ptr() : &_null; }
 
 	_FORCE_INLINE_ int size() const { return _cowdata.size(); }
+	Error resize(int p_size) { return _cowdata.resize(p_size); }
 	_FORCE_INLINE_ int length() const { return ptr() ? size() - 1 : 0; }
 	_FORCE_INLINE_ bool is_empty() const { return length() == 0; }
 
@@ -314,6 +315,7 @@ public:
 	_FORCE_INLINE_ const char32_t *get_data() const { return ptr() ? ptr() : &_null; }
 
 	_FORCE_INLINE_ int size() const { return _cowdata.size(); }
+	Error resize(int p_size) { return _cowdata.resize(p_size); }
 	_FORCE_INLINE_ int length() const { return ptr() ? size() - 1 : 0; }
 	_FORCE_INLINE_ bool is_empty() const { return length() == 0; }
 
@@ -543,6 +545,8 @@ public:
 	Error append_utf8(const Span<char> &p_range, bool p_skip_cr = false) {
 		return append_utf8(p_range.ptr(), p_range.size(), p_skip_cr);
 	}
+	Error parse_utf8(const char *p_utf8, int p_len = -1, bool p_skip_cr = false);
+
 	static String utf8(const char *p_utf8, int p_len = -1) {
 		String ret;
 		ret.append_utf8(p_utf8, p_len);

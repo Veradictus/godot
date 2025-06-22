@@ -5,6 +5,8 @@
 /*                             GODOT ENGINE                               */
 /*                        https://godotengine.org                         */
 /**************************************************************************/
+/* Copyright (c) 2024-present Godot Engine contributors                   */
+/*                                          (see GODOT_AUTHORS.md)        */
 /* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
 /* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
 /*                                                                        */
@@ -28,13 +30,15 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef EMWS_PEER_H
+#define EMWS_PEER_H
 
 #ifdef WEB_ENABLED
 
 #include "packet_buffer.h"
 #include "websocket_peer.h"
 
+#include "core/error/error_list.h"
 #include "core/io/packet_peer.h"
 #include "core/templates/ring_buffer.h"
 
@@ -66,7 +70,7 @@ private:
 	String selected_protocol;
 	String requested_url;
 
-	static WebSocketPeer *_create(bool p_notify_postinitialize) { return static_cast<WebSocketPeer *>(ClassDB::creator<EMWSPeer>(p_notify_postinitialize)); }
+	static WebSocketPeer *_create() { return memnew(EMWSPeer); }
 	static void _esws_on_connect(void *obj, char *proto);
 	static void _esws_on_message(void *obj, const uint8_t *p_data, int p_data_size, int p_is_string);
 	static void _esws_on_error(void *obj);
@@ -82,7 +86,7 @@ public:
 	virtual int get_available_packet_count() const override;
 	virtual Error get_packet(const uint8_t **r_buffer, int &r_buffer_size) override;
 	virtual Error put_packet(const uint8_t *p_buffer, int p_buffer_size) override;
-	virtual int get_max_packet_size() const override { return packet_buffer.size(); }
+	virtual int get_max_packet_size() const override { return packet_buffer.size(); };
 
 	// WebSocketPeer
 	virtual Error send(const uint8_t *p_buffer, int p_buffer_size, WriteMode p_mode) override;
@@ -109,3 +113,5 @@ public:
 };
 
 #endif // WEB_ENABLED
+
+#endif // EMWS_PEER_H

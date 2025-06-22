@@ -5,6 +5,8 @@
 /*                             GODOT ENGINE                               */
 /*                        https://godotengine.org                         */
 /**************************************************************************/
+/* Copyright (c) 2024-present Godot Engine contributors                   */
+/*                                          (see GODOT_AUTHORS.md)        */
 /* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
 /* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
 /*                                                                        */
@@ -37,8 +39,7 @@
 void EMWSPeer::_esws_on_connect(void *p_obj, char *p_proto) {
 	EMWSPeer *peer = static_cast<EMWSPeer *>(p_obj);
 	peer->ready_state = STATE_OPEN;
-	peer->selected_protocol.clear();
-	peer->selected_protocol.append_utf8(p_proto);
+	peer->selected_protocol.parse_utf8(p_proto);
 }
 
 void EMWSPeer::_esws_on_message(void *p_obj, const uint8_t *p_data, int p_data_size, int p_is_string) {
@@ -55,8 +56,7 @@ void EMWSPeer::_esws_on_error(void *p_obj) {
 void EMWSPeer::_esws_on_close(void *p_obj, int p_code, const char *p_reason, int p_was_clean) {
 	EMWSPeer *peer = static_cast<EMWSPeer *>(p_obj);
 	peer->close_code = p_code;
-	peer->close_reason.clear();
-	peer->close_reason.append_utf8(p_reason);
+	peer->close_reason.parse_utf8(p_reason);
 	peer->ready_state = STATE_CLOSED;
 }
 
@@ -70,9 +70,8 @@ Error EMWSPeer::connect_to_url(const String &p_url, Ref<TLSOptions> p_tls_option
 	String host;
 	String path;
 	String scheme;
-	String fragment;
 	int port = 0;
-	Error err = p_url.parse_url(scheme, host, port, path, fragment);
+	Error err = p_url.parse_url(scheme, host, port, path);
 	ERR_FAIL_COND_V_MSG(err != OK, err, "Invalid URL: " + p_url);
 
 	if (scheme.is_empty()) {
@@ -95,7 +94,7 @@ Error EMWSPeer::connect_to_url(const String &p_url, Ref<TLSOptions> p_tls_option
 	requested_url = scheme + host;
 
 	if (port && ((scheme == "ws://" && port != 80) || (scheme == "wss://" && port != 443))) {
-		requested_url += ":" + String::num_int64(port);
+		requested_url += ":" + String::num(port);
 	}
 
 	if (!path.is_empty()) {
@@ -106,7 +105,7 @@ Error EMWSPeer::connect_to_url(const String &p_url, Ref<TLSOptions> p_tls_option
 	if (peer_sock == -1) {
 		return FAILED;
 	}
-	in_buffer.resize(nearest_shift((uint32_t)inbound_buffer_size), max_queued_packets);
+	in_buffer.resize(nearest_shift(inbound_buffer_size), max_queued_packets);
 	packet_buffer.resize(inbound_buffer_size);
 	ready_state = STATE_CONNECTING;
 	return OK;
