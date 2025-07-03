@@ -1,6 +1,6 @@
 cd platform/android/java
 
-./gradlew clean
+# ./gradlew clean
 
 cd ../../..
 

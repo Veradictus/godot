@@ -21,7 +21,7 @@ mv bin/windows_release_x86_64.exe bin/templates_windows/windows_release_x86_64.e
 
 cd platform/android/java
 
-./gradlew clean
+#./gradlew clean
 
 cd ../../..
 
