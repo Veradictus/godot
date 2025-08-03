@@ -205,7 +205,7 @@ void TLSContextMbedTLS::clear() {
 	mbedtls_entropy_free(&entropy);
 
 	// Unlock and key and certificates
-	if (certs.is_valid()) {
+	if (certs.is_valid()) {Í
 		certs->unlock();
 	}
 	certs = Ref<X509Certificate>();

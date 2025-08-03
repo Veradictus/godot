@@ -285,7 +285,7 @@ typedef int (*mbedtls_pk_rsa_alt_decrypt_func)(void *ctx, size_t *olen,
                                                const unsigned char *input, unsigned char *output,
                                                size_t output_max_len);
 typedef int (*mbedtls_pk_rsa_alt_sign_func)(void *ctx,
-                                            int (*f_rng)(void *, unsigned char *, size_t),
+                                            mbedtls_f_rng_t *f_rng,
                                             void *p_rng,
                                             mbedtls_md_type_t md_alg, unsigned int hashlen,
                                             const unsigned char *hash, unsigned char *sig);
@@ -841,7 +841,7 @@ int mbedtls_pk_verify_ext(mbedtls_pk_type_t type, const void *options,
 int mbedtls_pk_sign(mbedtls_pk_context *ctx, mbedtls_md_type_t md_alg,
                     const unsigned char *hash, size_t hash_len,
                     unsigned char *sig, size_t sig_size, size_t *sig_len,
-                    int (*f_rng)(void *, unsigned char *, size_t), void *p_rng);
+                    mbedtls_f_rng_t *f_rng, void *p_rng);
 
 /**
  * \brief           Make signature given a signature type.
@@ -877,7 +877,7 @@ int mbedtls_pk_sign_ext(mbedtls_pk_type_t pk_type,
                         mbedtls_md_type_t md_alg,
                         const unsigned char *hash, size_t hash_len,
                         unsigned char *sig, size_t sig_size, size_t *sig_len,
-                        int (*f_rng)(void *, unsigned char *, size_t),
+                        mbedtls_f_rng_t *f_rng,
                         void *p_rng);
 
 /**
@@ -913,7 +913,7 @@ int mbedtls_pk_sign_restartable(mbedtls_pk_context *ctx,
                                 mbedtls_md_type_t md_alg,
                                 const unsigned char *hash, size_t hash_len,
                                 unsigned char *sig, size_t sig_size, size_t *sig_len,
-                                int (*f_rng)(void *, unsigned char *, size_t), void *p_rng,
+                                mbedtls_f_rng_t *f_rng, void *p_rng,
                                 mbedtls_pk_restart_ctx *rs_ctx);
 
 /**
@@ -939,7 +939,7 @@ int mbedtls_pk_sign_restartable(mbedtls_pk_context *ctx,
 int mbedtls_pk_decrypt(mbedtls_pk_context *ctx,
                        const unsigned char *input, size_t ilen,
                        unsigned char *output, size_t *olen, size_t osize,
-                       int (*f_rng)(void *, unsigned char *, size_t), void *p_rng);
+                       mbedtls_f_rng_t *f_rng, void *p_rng);
 
 /**
  * \brief           Encrypt message (including padding if relevant).
@@ -965,7 +965,7 @@ int mbedtls_pk_decrypt(mbedtls_pk_context *ctx,
 int mbedtls_pk_encrypt(mbedtls_pk_context *ctx,
                        const unsigned char *input, size_t ilen,
                        unsigned char *output, size_t *olen, size_t osize,
-                       int (*f_rng)(void *, unsigned char *, size_t), void *p_rng);
+                       mbedtls_f_rng_t *f_rng, void *p_rng);
 
 /**
  * \brief           Check if a public-private pair of keys matches.
@@ -983,7 +983,7 @@ int mbedtls_pk_encrypt(mbedtls_pk_context *ctx,
  */
 int mbedtls_pk_check_pair(const mbedtls_pk_context *pub,
                           const mbedtls_pk_context *prv,
-                          int (*f_rng)(void *, unsigned char *, size_t),
+                          mbedtls_f_rng_t *f_rng,
                           void *p_rng);
 
 /**
@@ -1101,7 +1101,7 @@ static inline mbedtls_ecp_keypair *mbedtls_pk_ec(const mbedtls_pk_context pk)
 int mbedtls_pk_parse_key(mbedtls_pk_context *ctx,
                          const unsigned char *key, size_t keylen,
                          const unsigned char *pwd, size_t pwdlen,
-                         int (*f_rng)(void *, unsigned char *, size_t), void *p_rng);
+                         mbedtls_f_rng_t *f_rng, void *p_rng);
 
 /** \ingroup pk_module */
 /**
@@ -1165,7 +1165,7 @@ int mbedtls_pk_parse_public_key(mbedtls_pk_context *ctx,
  */
 int mbedtls_pk_parse_keyfile(mbedtls_pk_context *ctx,
                              const char *path, const char *password,
-                             int (*f_rng)(void *, unsigned char *, size_t), void *p_rng);
+                             mbedtls_f_rng_t *f_rng, void *p_rng);
 
 /** \ingroup pk_module */
 /**
