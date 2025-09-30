@@ -1,9 +1,9 @@
 short_name = "godot"
 name = "Godot Engine"
 major = 4
-minor = 5
-patch = 4
-status = "kaetram.mimalloc.4"
+minor = 6
+patch = 0
+status = "kaetram.mimalloc.1"
 module_config = ""
 website = "https://godotengine.org"
 docs = "latest"
