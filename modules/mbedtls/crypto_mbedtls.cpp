@@ -39,10 +39,6 @@
 #include "core/io/file_access.h"
 #include "core/os/os.h"
 
-#ifdef TOOLS_ENABLED
-#include "editor/editor_settings.h"
-#endif
-
 #include <mbedtls/debug.h>
 #include <mbedtls/md.h>
 #include <mbedtls/pem.h>
