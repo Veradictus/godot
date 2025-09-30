@@ -1017,7 +1017,7 @@ Curve2D::Interval Curve2D::_find_interval(real_t p_offset) const {
 	interval.idx = idx;
 	if (idx_interval < FLT_EPSILON) {
 		interval.frac = 0.5; // For a very short interval, 0.5 is a reasonable choice.
-		ERR_FAIL_V_MSG(interval, "Zero length interval.");
+		//ERR_FAIL_V_MSG(interval, "Zero length interval.");
 	}
 
 	interval.frac = (p_offset - offset_begin) / idx_interval;
@@ -1898,7 +1898,7 @@ Curve3D::Interval Curve3D::_find_interval(real_t p_offset) const {
 	interval.idx = idx;
 	if (idx_interval < FLT_EPSILON) {
 		interval.frac = 0.5; // For a very short interval, 0.5 is a reasonable choice.
-		ERR_FAIL_V_MSG(interval, "Zero length interval.");
+		//ERR_FAIL_V_MSG(interval, "Zero length interval.");
 	}
 
 	interval.frac = (p_offset - offset_begin) / idx_interval;
