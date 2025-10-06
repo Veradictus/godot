@@ -2029,7 +2029,7 @@ Error String::parse_utf8(const char *p_utf8, int p_len, bool p_skip_cr) {
 		return OK; // empty string
 	}
 
-	resize(str_size + 1);
+	resize_uninitialized(str_size + 1);
 	char32_t *dst = ptrw();
 	dst[str_size] = 0;
 
