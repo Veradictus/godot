@@ -31,6 +31,10 @@
 #include "node.h"
 #include "node.compat.inc"
 
+STATIC_ASSERT_INCOMPLETE_TYPE(class, Mesh);
+STATIC_ASSERT_INCOMPLETE_TYPE(class, RenderingServer);
+STATIC_ASSERT_INCOMPLETE_TYPE(class, Shader);
+
 #include "core/config/project_settings.h"
 #include "core/io/resource_loader.h"
 #include "core/object/message_queue.h"
@@ -2113,6 +2117,14 @@ Node *Node::find_parent(const String &p_pattern) const {
 	}
 
 	return nullptr;
+}
+
+void Node::set_unique_scene_id(int32_t p_unique_id) {
+	data.unique_scene_id = p_unique_id;
+}
+
+int32_t Node::get_unique_scene_id() const {
+	return data.unique_scene_id;
 }
 
 Window *Node::get_window() const {
