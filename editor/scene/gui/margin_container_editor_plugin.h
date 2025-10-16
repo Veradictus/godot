@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  translation_po.cpp                                                    */
+/*  margin_container_editor_plugin.h                                      */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */
@@ -28,7 +28,21 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#include "translation_po.h"
+#pragma once
 
-// This file is intentionally left empty.
-// It makes sure that `TranslationPO` exists, for compatibility.
+#include "editor/plugins/editor_plugin.h"
+#include "scene/gui/margin_container.h"
+
+class CanvasItemEditor;
+
+class MarginContainerEditorPlugin : public EditorPlugin {
+	GDCLASS(MarginContainerEditorPlugin, EditorPlugin);
+
+	MarginContainer *margin_container = nullptr;
+
+public:
+	void forward_canvas_draw_over_viewport(Control *p_viewport_control) override;
+
+	virtual void edit(Object *p_object) override;
+	virtual bool handles(Object *p_object) const override;
+};
