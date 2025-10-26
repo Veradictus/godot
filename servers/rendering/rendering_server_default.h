@@ -424,6 +424,7 @@ public:
 	FUNC2(multimesh_set_physics_interpolated, RID, bool)
 	FUNC2(multimesh_set_physics_interpolation_quality, RID, MultimeshPhysicsInterpolationQuality)
 	FUNC2(multimesh_instance_reset_physics_interpolation, RID, int)
+	FUNC1(multimesh_instances_reset_physics_interpolation, RID)
 
 	FUNC2(multimesh_set_visible_instances, RID, int)
 	FUNC1RC(int, multimesh_get_visible_instances, RID)
@@ -1112,7 +1113,7 @@ public:
 #define ServerName RendererCompositor
 #define server_name RSG::rasterizer
 
-	FUNC4S(set_boot_image, const Ref<Image> &, const Color &, bool, bool)
+	FUNC4S(set_boot_image_with_stretch, const Ref<Image> &, const Color &, RenderingServer::SplashStretchMode, bool)
 
 	/* STATUS INFORMATION */
 
