@@ -12,7 +12,7 @@ index 49c24897ca..48aab56b70 100644
  
  File extracted from upstream release tarball:
 diff --git a/thirdparty/mbedtls/include/psa/crypto.h b/thirdparty/mbedtls/include/psa/crypto.h
-index 92f9c824e9..1cc2e7e729 100644
+index 2fe9f35ec3..ed7da26276 100644
 --- a/thirdparty/mbedtls/include/psa/crypto.h
 +++ b/thirdparty/mbedtls/include/psa/crypto.h
 @@ -119,7 +119,9 @@ psa_status_t psa_crypto_init(void);
@@ -25,7 +25,7 @@ index 92f9c824e9..1cc2e7e729 100644
  
  /** Declare a key as persistent and set its key identifier.
   *
-@@ -333,7 +335,9 @@ static void psa_set_key_bits(psa_key_attributes_t *attributes,
+@@ -348,7 +350,9 @@ static void psa_set_key_bits(psa_key_attributes_t *attributes,
   *
   * \return The key type stored in the attribute structure.
   */
@@ -35,7 +35,7 @@ index 92f9c824e9..1cc2e7e729 100644
  
  /** Retrieve the key size from key attributes.
   *
-@@ -936,7 +940,9 @@ typedef struct psa_hash_operation_s psa_hash_operation_t;
+@@ -951,7 +955,9 @@ typedef struct psa_hash_operation_s psa_hash_operation_t;
  
  /** Return an initial value for a hash operation object.
   */
@@ -45,7 +45,7 @@ index 92f9c824e9..1cc2e7e729 100644
  
  /** Set up a multipart hash operation.
   *
-@@ -1295,7 +1301,9 @@ typedef struct psa_mac_operation_s psa_mac_operation_t;
+@@ -1310,7 +1316,9 @@ typedef struct psa_mac_operation_s psa_mac_operation_t;
  
  /** Return an initial value for a MAC operation object.
   */
@@ -55,7 +55,7 @@ index 92f9c824e9..1cc2e7e729 100644
  
  /** Set up a multipart MAC calculation operation.
   *
-@@ -1708,7 +1716,9 @@ typedef struct psa_cipher_operation_s psa_cipher_operation_t;
+@@ -1723,7 +1731,9 @@ typedef struct psa_cipher_operation_s psa_cipher_operation_t;
  
  /** Return an initial value for a cipher operation object.
   */
@@ -65,7 +65,7 @@ index 92f9c824e9..1cc2e7e729 100644
  
  /** Set the key for a multipart symmetric encryption operation.
   *
-@@ -2226,7 +2236,9 @@ typedef struct psa_aead_operation_s psa_aead_operation_t;
+@@ -2241,7 +2251,9 @@ typedef struct psa_aead_operation_s psa_aead_operation_t;
  
  /** Return an initial value for an AEAD operation object.
   */
@@ -75,7 +75,7 @@ index 92f9c824e9..1cc2e7e729 100644
  
  /** Set the key for a multipart authenticated encryption operation.
   *
-@@ -3213,7 +3225,9 @@ typedef struct psa_key_derivation_s psa_key_derivation_operation_t;
+@@ -3228,7 +3240,9 @@ typedef struct psa_key_derivation_s psa_key_derivation_operation_t;
  
  /** Return an initial value for a key derivation operation object.
   */
