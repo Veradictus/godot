@@ -76,6 +76,18 @@ void JSON::_stringify(String &r_result, const Variant &p_var, const String &p_in
 		case Variant::FLOAT: {
 			const double num = p_var;
 
+			// JSON does not support NaN or Infinity, so use extremely large numbers for infinity.
+			if (!Math::is_finite(num)) {
+				if (num == Math::INF) {
+					r_result += "1e99999";
+				} else if (num == -Math::INF) {
+					r_result += "-1e99999";
+				} else {
+					WARN_PRINT_ONCE("`NaN` (\"Not a Number\") found in argument passed to JSON.stringify(). `NaN` cannot be represented in JSON, so the value has been replaced with `null`. This warning will not be printed for any later NaN occurrences.");
+					r_result += "null";
+				}
+				return;
+			}
 			// Only for exactly 0. If we have approximately 0 let the user decide how much
 			// precision they want.
 			if (num == double(0.0)) {
@@ -1581,8 +1593,7 @@ bool ResourceFormatLoaderJSON::handles_type(const String &p_type) const {
 }
 
 String ResourceFormatLoaderJSON::get_resource_type(const String &p_path) const {
-	String el = p_path.get_extension().to_lower();
-	if (el == "json") {
+	if (p_path.has_extension("json")) {
 		return "JSON";
 	}
 	return "";

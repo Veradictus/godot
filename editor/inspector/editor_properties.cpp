@@ -3014,7 +3014,7 @@ void EditorPropertyNodePath::drop_data_fw(const Point2 &p_point, const Variant &
 }
 
 bool EditorPropertyNodePath::is_drop_valid(const Dictionary &p_drag_data) const {
-	if (p_drag_data["type"] != "nodes") {
+	if (!p_drag_data.has("type") || p_drag_data["type"] != "nodes") {
 		return false;
 	}
 	Array nodes = p_drag_data["nodes"];
@@ -3082,7 +3082,7 @@ void EditorPropertyNodePath::update_property() {
 	}
 
 	assign->set_text(target_node->get_name());
-	assign->set_button_icon(EditorNode::get_singleton()->get_object_icon(target_node, "Node"));
+	assign->set_button_icon(EditorNode::get_singleton()->get_object_icon(target_node));
 }
 
 void EditorPropertyNodePath::setup(const Vector<StringName> &p_valid_types, bool p_use_path_from_scene_root, bool p_editing_node) {
