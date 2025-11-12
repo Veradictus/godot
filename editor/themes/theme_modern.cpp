@@ -1219,7 +1219,7 @@ void ThemeModern::populate_standard_styles(const Ref<EditorTheme> &p_theme, Edit
 
 		p_theme->set_stylebox(SceneStringName(panel), "GraphEdit", ge_panel_style);
 		p_theme->set_stylebox("panel_focus", "GraphEdit", p_config.focus_style);
-		p_theme->set_stylebox("menu_panel", "GraphEdit", EditorThemeManager::make_flat_stylebox(p_config.dark_color_1 * Color(1, 1, 1, 0.6), 4, 2, 4, 2, 3));
+		p_theme->set_stylebox("menu_panel", "GraphEdit", EditorThemeManager::make_flat_stylebox(p_config.surface_low_color * Color(1, 1, 1, 0.5), 4, 2, 4, 2, 3));
 
 		float grid_base_brightness = p_config.dark_theme ? 1.0 : 0.0;
 		GraphEdit::GridPattern grid_pattern = (GraphEdit::GridPattern) int(EDITOR_GET("editors/visual_editors/grid_pattern"));
@@ -1256,7 +1256,7 @@ void ThemeModern::populate_standard_styles(const Ref<EditorTheme> &p_theme, Edit
 
 		// GraphEditMinimap.
 		{
-			Ref<StyleBoxFlat> style_minimap_bg = EditorThemeManager::make_flat_stylebox(p_config.dark_color_1, 0, 0, 0, 0);
+			Ref<StyleBoxFlat> style_minimap_bg = EditorThemeManager::make_flat_stylebox(p_config.surface_low_color * Color(1, 1, 1, 0.3), 0, 0, 0, 0);
 			style_minimap_bg->set_border_color(p_config.dark_color_3);
 			style_minimap_bg->set_border_width_all(1);
 			p_theme->set_stylebox(SceneStringName(panel), "GraphEditMinimap", style_minimap_bg);
@@ -1268,7 +1268,7 @@ void ThemeModern::populate_standard_styles(const Ref<EditorTheme> &p_theme, Edit
 				style_minimap_camera->set_border_color(Color(0.65, 0.65, 0.65, 0.45));
 				style_minimap_node = EditorThemeManager::make_flat_stylebox(Color(1, 1, 1), 0, 0, 0, 0);
 			} else {
-				style_minimap_camera = EditorThemeManager::make_flat_stylebox(Color(0.38, 0.38, 0.38, 0.2), 0, 0, 0, 0);
+				style_minimap_camera = EditorThemeManager::make_flat_stylebox(Color(0.38, 0.38, 0.38, 0.1), 0, 0, 0, 0);
 				style_minimap_camera->set_border_color(Color(0.38, 0.38, 0.38, 0.45));
 				style_minimap_node = EditorThemeManager::make_flat_stylebox(Color(0, 0, 0), 0, 0, 0, 0);
 			}
@@ -1291,7 +1291,7 @@ void ThemeModern::populate_standard_styles(const Ref<EditorTheme> &p_theme, Edit
 			const int gn_corner_radius = 3;
 
 			const Color gn_bg_color = p_config.dark_theme ? p_config.dark_color_3 : p_config.dark_color_1.lerp(p_config.mono_color, 0.09);
-			const Color gn_frame_bg = _get_base_color(p_config, p_config.dark_theme ? -1.8 : -1.0, 0.9);
+			const Color gn_frame_bg = _get_base_color(p_config, p_config.dark_theme ? -1.8 : -0.5, 0.9);
 
 			const bool high_contrast_borders = p_config.draw_extra_borders && p_config.dark_theme;
 
@@ -1576,9 +1576,11 @@ void ThemeModern::populate_editor_styles(const Ref<EditorTheme> &p_theme, Editor
 		p_theme->set_stylebox("ScriptEditor", EditorStringName(EditorStyles), EditorThemeManager::make_empty_stylebox(0, 0, 0, 0));
 
 		// Game view.
-		p_theme->set_type_variation("GamePanel", "Panel");
+		p_theme->set_type_variation("GamePanel", "PanelContainer");
 		Ref<StyleBoxFlat> game_panel = p_theme->get_stylebox(SceneStringName(panel), SNAME("Panel"))->duplicate();
 		game_panel->set_corner_radius_all(0);
+		game_panel->set_content_margin_all(0);
+		game_panel->set_draw_center(true);
 		p_theme->set_stylebox(SceneStringName(panel), "GamePanel", game_panel);
 
 		// Main menu.
@@ -1617,8 +1619,33 @@ void ThemeModern::populate_editor_styles(const Ref<EditorTheme> &p_theme, Editor
 
 		// Bottom panel.
 		Ref<StyleBoxFlat> style_bottom_panel = p_config.content_panel_style->duplicate();
+		style_bottom_panel->set_border_width(SIDE_BOTTOM, 0);
 		style_bottom_panel->set_corner_radius_all(p_config.corner_radius * EDSCALE);
+		style_bottom_panel->set_corner_radius(CORNER_BOTTOM_LEFT, 0);
+		style_bottom_panel->set_corner_radius(CORNER_BOTTOM_RIGHT, 0);
+
+		Ref<StyleBoxFlat> style_bottom_panel_hidden = style_bottom_panel->duplicate();
+		style_bottom_panel_hidden->set_content_margin(SIDE_TOP, 0);
+		Ref<StyleBoxFlat> style_bottom_panel_tabbar = p_config.content_panel_style->duplicate();
+		style_bottom_panel_tabbar->set_content_margin(SIDE_TOP, 0);
+
+		Ref<StyleBoxEmpty> style_bottom_tab = p_config.base_empty_style->duplicate();
+		style_bottom_tab->set_content_margin_individual(p_config.base_margin * 2 * EDSCALE, p_config.base_margin * 1.2 * EDSCALE, p_config.base_margin * 2 * EDSCALE, p_config.base_margin * 1.2 * EDSCALE);
+		Ref<StyleBoxFlat> bottom_panel_button_hover = p_config.flat_button_hover->duplicate();
+		bottom_panel_button_hover->set_content_margin_individual(p_config.base_margin * 2 * EDSCALE, p_config.base_margin * 1.2 * EDSCALE, p_config.base_margin * 2 * EDSCALE, p_config.base_margin * 1.2 * EDSCALE);
+
 		p_theme->set_stylebox("BottomPanel", EditorStringName(EditorStyles), style_bottom_panel);
+		p_theme->set_type_variation("BottomPanel", "TabContainer");
+		p_theme->set_stylebox(SceneStringName(panel), "BottomPanel", style_bottom_panel_hidden);
+		p_theme->set_stylebox("tabbar_background", "BottomPanel", style_bottom_panel_tabbar);
+		p_theme->set_stylebox("tab_selected", "BottomPanel", bottom_panel_button_hover);
+		p_theme->set_stylebox("tab_hovered", "BottomPanel", bottom_panel_button_hover);
+		p_theme->set_stylebox("tab_focus", "BottomPanel", p_config.base_empty_style);
+		p_theme->set_stylebox("tab_unselected", "BottomPanel", style_bottom_tab);
+		p_theme->set_color("font_unselected_color", "BottomPanel", p_config.font_color);
+		p_theme->set_color("font_hovered_color", "BottomPanel", p_config.font_hover_color);
+		p_theme->set_color("font_selected_color", "BottomPanel", p_config.font_hover_color);
+		p_theme->set_constant("tab_separation", "BottomPanel", p_config.separation_margin);
 
 		p_theme->set_type_variation("BottomPanelButton", "FlatMenuButton");
 
@@ -1627,8 +1654,6 @@ void ThemeModern::populate_editor_styles(const Ref<EditorTheme> &p_theme, Editor
 		bottom_panel_button->set_content_margin_individual(p_config.base_margin * 2 * EDSCALE, p_config.base_margin * 1.2 * EDSCALE, p_config.base_margin * 2 * EDSCALE, p_config.base_margin * 1.2 * EDSCALE);
 		p_theme->set_stylebox(CoreStringName(normal), "BottomPanelButton", bottom_panel_button);
 
-		Ref<StyleBoxFlat> bottom_panel_button_hover = p_config.flat_button_hover->duplicate();
-		bottom_panel_button_hover->set_content_margin_individual(p_config.base_margin * 2 * EDSCALE, p_config.base_margin * 1.2 * EDSCALE, p_config.base_margin * 2 * EDSCALE, p_config.base_margin * 1.2 * EDSCALE);
 		p_theme->set_stylebox(SceneStringName(hover), "BottomPanelButton", bottom_panel_button_hover);
 		p_theme->set_stylebox(SceneStringName(pressed), "BottomPanelButton", bottom_panel_button_hover);
 
@@ -1640,8 +1665,11 @@ void ThemeModern::populate_editor_styles(const Ref<EditorTheme> &p_theme, Editor
 		p_theme->set_color("icon_pressed_color", "BottomPanelButton", Color(1, 1, 1, 1));
 		Color icon_hover_color = p_config.icon_normal_color * (p_config.dark_icon_and_font ? 1.15 : 1.0);
 		icon_hover_color.a = 1.0;
+		p_theme->set_color("icon_hover_color", "BottomPanel", icon_hover_color);
+		p_theme->set_color("icon_hover_pressed_color", "BottomPanel", icon_hover_color);
 		p_theme->set_color("icon_hover_color", "BottomPanelButton", icon_hover_color);
-		p_theme->set_color("icon_hover_pressed_color", "BottomPanelButton", icon_hover_color);
+		p_theme->set_color("icon_hover_pressed_color", "BottomPanelButton", p_config.accent_color);
+		p_theme->set_color("icon_pressed_color", "BottomPanelButton", p_config.accent_color);
 
 		// Audio bus.
 		Ref<StyleBoxFlat> audio_bus = p_config.base_style->duplicate();
@@ -1924,12 +1952,22 @@ void ThemeModern::populate_editor_styles(const Ref<EditorTheme> &p_theme, Editor
 		p_theme->set_constant("h_separation", "EditorInspectorSection", p_config.base_margin * EDSCALE);
 
 		Color prop_subsection_stylebox_color = p_config.button_disabled_color.lerp(p_config.base_color, 0.48);
-		p_theme->set_color("prop_subsection_stylebox", EditorStringName(Editor), prop_subsection_stylebox_color);
+		p_theme->set_color("prop_subsection_stylebox_color", EditorStringName(Editor), prop_subsection_stylebox_color);
 
-		Ref<StyleBoxFlat> style_highlight_subsection = p_config.base_style->duplicate();
-		style_highlight_subsection->set_bg_color(prop_subsection_stylebox_color);
-		style_highlight_subsection->set_corner_radius_all(p_config.corner_radius * EDSCALE);
-		p_theme->set_stylebox("style_highlight_subsection", EditorStringName(Editor), style_highlight_subsection);
+		Ref<StyleBoxFlat> prop_subsection_stylebox = p_config.base_style->duplicate();
+		prop_subsection_stylebox->set_bg_color(p_theme->get_color("prop_subsection_stylebox_color", EditorStringName(Editor)));
+		prop_subsection_stylebox->set_corner_radius_all(p_config.corner_radius * EDSCALE);
+		p_theme->set_stylebox("prop_subsection_stylebox", EditorStringName(Editor), prop_subsection_stylebox);
+
+		Ref<StyleBoxFlat> prop_subsection_stylebox_left = prop_subsection_stylebox->duplicate();
+		prop_subsection_stylebox_left->set_corner_radius(CORNER_TOP_RIGHT, 0);
+		prop_subsection_stylebox_left->set_corner_radius(CORNER_BOTTOM_RIGHT, 0);
+		p_theme->set_stylebox("prop_subsection_stylebox_left", EditorStringName(Editor), prop_subsection_stylebox_left);
+
+		Ref<StyleBoxFlat> prop_subsection_stylebox_right = prop_subsection_stylebox->duplicate();
+		prop_subsection_stylebox_right->set_corner_radius(CORNER_TOP_LEFT, 0);
+		prop_subsection_stylebox_right->set_corner_radius(CORNER_BOTTOM_LEFT, 0);
+		p_theme->set_stylebox("prop_subsection_stylebox_right", EditorStringName(Editor), prop_subsection_stylebox_right);
 
 		p_theme->set_color("prop_subsection", EditorStringName(Editor), Color(1, 1, 1, 0));
 #ifndef DISABLE_DEPRECATED // Used before 4.3.

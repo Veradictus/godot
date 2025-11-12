@@ -2746,6 +2746,10 @@ void FileSystemDock::_resource_created() {
 	EditorNode::get_singleton()->save_resource_as(Ref<Resource>(r), fpath);
 }
 
+void FileSystemDock::_script_or_shader_created(const Ref<Resource> &p_resource) {
+	EditorNode::get_singleton()->push_item(p_resource.ptr());
+}
+
 void FileSystemDock::_search_changed(const String &p_text, const Control *p_from) {
 	if (searched_tokens.is_empty()) {
 		// Register the uncollapsed paths before they change.
@@ -3140,10 +3144,10 @@ void FileSystemDock::drop_data_fw(const Point2 &p_point, const Variant &p_data, 
 				confirm_move_to_dir = to_dir;
 
 				if (Input::get_singleton()->is_key_pressed(Key::CMD_OR_CTRL)) {
-					move_confirm_text = vformat(TTR("Copy %d selected item(s) to \"%s\"?"), to_move.size(), target_dir);
+					move_confirm_text = vformat(TTRN("Copy %d selected item to \"%s\"?", "Copy %d selected items to \"%s\"?", to_move.size()), to_move.size(), target_dir);
 					confirm_to_copy = true;
 				} else {
-					move_confirm_text = vformat(TTR("Move %d selected item(s) to \"%s\"?"), to_move.size(), target_dir);
+					move_confirm_text = vformat(TTRN("Move %d selected item to \"%s\"?", "Move %d selected items to \"%s\"?", to_move.size()), to_move.size(), target_dir);
 					confirm_to_copy = false;
 				}
 
@@ -4441,9 +4445,12 @@ FileSystemDock::FileSystemDock() {
 	make_script_dialog = memnew(ScriptCreateDialog);
 	make_script_dialog->set_title(TTRC("Create Script"));
 	add_child(make_script_dialog);
+	make_script_dialog->connect("script_created", callable_mp(this, &FileSystemDock::_script_or_shader_created));
 
 	make_shader_dialog = memnew(ShaderCreateDialog);
 	add_child(make_shader_dialog);
+	make_shader_dialog->connect("shader_created", callable_mp(this, &FileSystemDock::_script_or_shader_created));
+	make_shader_dialog->connect("shader_include_created", callable_mp(this, &FileSystemDock::_script_or_shader_created));
 
 	new_resource_dialog = memnew(CreateDialog);
 	add_child(new_resource_dialog);
