@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  translation_po.cpp                                                    */
+/*  text_shader_language_plugin.h                                         */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */
@@ -28,7 +28,20 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#include "translation_po.h"
+#pragma once
 
-// This file is intentionally left empty.
-// It makes sure that `TranslationPO` exists, for compatibility.
+#include "editor/shader/editor_shader_language_plugin.h"
+
+class TextShaderLanguagePlugin : public EditorShaderLanguagePlugin {
+	GDCLASS(TextShaderLanguagePlugin, EditorShaderLanguagePlugin);
+
+public:
+	virtual bool handles_shader(const Ref<Shader> &p_shader) const override;
+	virtual bool handles_shader_include(const Ref<ShaderInclude> &p_shader_inc) const override;
+	virtual ShaderEditor *edit_shader(const Ref<Shader> &p_shader) override;
+	virtual ShaderEditor *edit_shader_include(const Ref<ShaderInclude> &p_shader_inc) override;
+	virtual Ref<Shader> create_new_shader(int p_variation_index, Shader::Mode p_shader_mode, int p_template_index) override;
+	virtual Ref<ShaderInclude> create_new_shader_include() override;
+	virtual PackedStringArray get_language_variations() const override;
+	virtual String get_file_extension(int p_variation_index) const override;
+};

@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  forward_id_storage.cpp                                                */
+/*  dock_constants.h                                                      */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */
@@ -28,16 +28,28 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#include "forward_id_storage.h"
+#pragma once
 
-using namespace RendererRD;
+namespace DockConstants {
 
-ForwardIDStorage *ForwardIDStorage::singleton = nullptr;
+enum DockSlot {
+	DOCK_SLOT_NONE = -1,
+	DOCK_SLOT_LEFT_UL,
+	DOCK_SLOT_LEFT_BL,
+	DOCK_SLOT_LEFT_UR,
+	DOCK_SLOT_LEFT_BR,
+	DOCK_SLOT_RIGHT_UL,
+	DOCK_SLOT_RIGHT_BL,
+	DOCK_SLOT_RIGHT_UR,
+	DOCK_SLOT_RIGHT_BR,
+	DOCK_SLOT_BOTTOM,
+	DOCK_SLOT_MAX
+};
 
-ForwardIDStorage::ForwardIDStorage() {
-	singleton = this;
-}
+enum DockLayout {
+	DOCK_LAYOUT_VERTICAL = 1,
+	DOCK_LAYOUT_HORIZONTAL = 2,
+	DOCK_LAYOUT_FLOATING = 4,
+};
 
-ForwardIDStorage::~ForwardIDStorage() {
-	singleton = nullptr;
-}
+}; //namespace DockConstants

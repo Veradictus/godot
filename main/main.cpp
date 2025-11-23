@@ -992,6 +992,7 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 	OS::get_singleton()->initialize();
 
 #if !defined(OVERRIDE_PATH_ENABLED) && !defined(TOOLS_ENABLED)
+	String old_cwd = OS::get_singleton()->get_cwd();
 #ifdef MACOS_ENABLED
 	String new_cwd = OS::get_singleton()->get_bundle_resource_dir();
 	if (new_cwd.is_empty() || !new_cwd.is_absolute_path()) {
@@ -1126,7 +1127,7 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 			forwardable_cli_arguments[CLI_SCOPE_TOOL].push_back(arg);
 			forwardable_cli_arguments[CLI_SCOPE_PROJECT].push_back(arg);
 		}
-		if (arg == "--single-window") {
+		if (arg == "--single-window" || arg == "--editor-pseudolocalization") {
 			forwardable_cli_arguments[CLI_SCOPE_TOOL].push_back(arg);
 		}
 		if (arg == "--audio-driver" ||
@@ -1884,6 +1885,7 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 #ifdef TOOLS_ENABLED
 		} else if (arg == "--editor-pseudolocalization") {
 			editor_pseudolocalization = true;
+			main_args.push_back(arg);
 #endif // TOOLS_ENABLED
 		} else if (arg == "--gpu-profile") {
 			profile_gpu = true;
@@ -2018,8 +2020,23 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 #ifdef TOOLS_ENABLED
 		editor = false;
 #else
-		const String error_msg = "Error: Couldn't load project data at path \"" + project_path + "\". Is the .pck file missing?\nIf you've renamed the executable, the associated .pck file should also be renamed to match the executable's name (without the extension).\n";
-		OS::get_singleton()->print("%s", error_msg.utf8().get_data());
+		String error_msg = "Error: Couldn't load project data at path \"" + (project_path == "." ? OS::get_singleton()->get_cwd() : project_path) + "\". Is the .pck file missing?\n\n";
+#if !defined(OVERRIDE_PATH_ENABLED) && !defined(TOOLS_ENABLED)
+		String exec_path = OS::get_singleton()->get_executable_path();
+		String exec_basename = exec_path.get_file().get_basename();
+
+		if (FileAccess::exists(old_cwd.path_join(exec_basename + ".pck"))) {
+			error_msg += "\"" + exec_basename + ".pck\" was found in the current working directory. To be able to load a project from the CWD, use the `disable_path_overrides=no` SCons option when compiling Godot.\n";
+		} else if (FileAccess::exists(old_cwd.path_join("project.godot"))) {
+			error_msg += "\"project.godot\" was found in the current working directory. To be able to load a project from the CWD, use the `disable_path_overrides=no` SCons option when compiling Godot.\n";
+		} else {
+			error_msg += "If you've renamed the executable, the associated .pck file should also be renamed to match the executable's name (without the extension).\n";
+		}
+#else
+		error_msg += "If you've renamed the executable, the associated .pck file should also be renamed to match the executable's name (without the extension).\n";
+#endif
+		ERR_PRINT(error_msg);
+
 		OS::get_singleton()->alert(error_msg);
 
 		goto error;
@@ -4758,9 +4775,11 @@ bool Main::iteration() {
 
 	// process all our active interfaces
 #ifndef XR_DISABLED
+	GodotProfileZoneGrouped(_profile_zone, "xr_server->_process");
 	XRServer::get_singleton()->_process();
 #endif // XR_DISABLED
 
+	GodotProfileZoneGrouped(_profile_zone, "physics");
 	for (int iters = 0; iters < advance.physics_steps; ++iters) {
 		GodotProfileZone("Physics Step");
 		GodotProfileZoneGroupedFirst(_physics_zone, "setup");

@@ -38,6 +38,7 @@
 #include "core/io/dir_access.h"
 #include "core/io/file_access.h"
 #include "core/profiling/profiling.h"
+#include "core/templates/fixed_vector.h"
 #include "modules/modules_enabled.gen.h"
 #include "servers/rendering/rendering_shader_container.h"
 
@@ -1079,7 +1080,7 @@ RID RenderingDevice::texture_create(const TextureFormat &p_format, const Texture
 	texture.allowed_shared_formats = format.shareable_formats;
 	texture.has_initial_data = !data.is_empty();
 
-	if ((format.usage_bits & TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)) {
+	if ((format.usage_bits & (TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | TEXTURE_USAGE_DEPTH_RESOLVE_ATTACHMENT_BIT))) {
 		texture.read_aspect_flags.set_flag(RDD::TEXTURE_ASPECT_DEPTH_BIT);
 		texture.barrier_aspect_flags.set_flag(RDD::TEXTURE_ASPECT_DEPTH_BIT);
 		if (format_has_stencil(format.format)) {
@@ -1093,7 +1094,7 @@ RID RenderingDevice::texture_create(const TextureFormat &p_format, const Texture
 	texture.bound = false;
 
 	// Textures are only assumed to be immutable if they have initial data and none of the other bits that indicate write usage are enabled.
-	bool texture_mutable_by_default = texture.usage_flags & (TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | TEXTURE_USAGE_STORAGE_BIT | TEXTURE_USAGE_STORAGE_ATOMIC_BIT);
+	bool texture_mutable_by_default = texture.usage_flags & (TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | TEXTURE_USAGE_DEPTH_RESOLVE_ATTACHMENT_BIT | TEXTURE_USAGE_STORAGE_BIT | TEXTURE_USAGE_STORAGE_ATOMIC_BIT);
 	if (data.is_empty() || texture_mutable_by_default) {
 		_texture_make_mutable(&texture, RID());
 	}
@@ -1224,7 +1225,7 @@ RID RenderingDevice::texture_create_from_extension(TextureType p_type, DataForma
 	texture.allowed_shared_formats.push_back(RD::DATA_FORMAT_R8G8B8A8_UNORM);
 	texture.allowed_shared_formats.push_back(RD::DATA_FORMAT_R8G8B8A8_SRGB);
 
-	if (p_usage.has_flag(TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)) {
+	if (p_usage.has_flag(TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) || p_usage.has_flag(TEXTURE_USAGE_DEPTH_RESOLVE_ATTACHMENT_BIT)) {
 		texture.read_aspect_flags.set_flag(RDD::TEXTURE_ASPECT_DEPTH_BIT);
 		texture.barrier_aspect_flags.set_flag(RDD::TEXTURE_ASPECT_DEPTH_BIT);
 		/*if (format_has_stencil(p_format.format)) {
@@ -1235,7 +1236,7 @@ RID RenderingDevice::texture_create_from_extension(TextureType p_type, DataForma
 		texture.barrier_aspect_flags.set_flag(RDD::TEXTURE_ASPECT_COLOR_BIT);
 	}
 
-	texture.driver_id = driver->texture_create_from_extension(p_image, p_type, p_format, p_layers, (texture.usage_flags & TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT), p_mipmaps);
+	texture.driver_id = driver->texture_create_from_extension(p_image, p_type, p_format, p_layers, (texture.usage_flags & (TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | TEXTURE_USAGE_DEPTH_RESOLVE_ATTACHMENT_BIT)), p_mipmaps);
 	ERR_FAIL_COND_V(!texture.driver_id, RID());
 
 	_texture_make_mutable(&texture, RID());
@@ -2467,7 +2468,7 @@ RDD::RenderPassID RenderingDevice::_render_pass_create(RenderingDeviceDriver *p_
 
 		ERR_FAIL_INDEX_V(p_attachments[i].format, DATA_FORMAT_MAX, RDD::RenderPassID());
 		ERR_FAIL_INDEX_V(p_attachments[i].samples, TEXTURE_SAMPLES_MAX, RDD::RenderPassID());
-		ERR_FAIL_COND_V_MSG(!(p_attachments[i].usage_flags & (TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | TEXTURE_USAGE_INPUT_ATTACHMENT_BIT | TEXTURE_USAGE_VRS_ATTACHMENT_BIT)),
+		ERR_FAIL_COND_V_MSG(!(p_attachments[i].usage_flags & (TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | TEXTURE_USAGE_DEPTH_RESOLVE_ATTACHMENT_BIT | TEXTURE_USAGE_INPUT_ATTACHMENT_BIT | TEXTURE_USAGE_VRS_ATTACHMENT_BIT)),
 				RDD::RenderPassID(), "Texture format for index (" + itos(i) + ") requires an attachment (color, depth-stencil, input or VRS) bit set.");
 
 		RDD::Attachment description;
@@ -2494,6 +2495,13 @@ RDD::RenderPassID RenderingDevice::_render_pass_create(RenderingDeviceDriver *p_
 				description.initial_layout = RDD::TEXTURE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 				description.final_layout = RDD::TEXTURE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 			} else if (p_attachments[i].usage_flags & TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) {
+				description.load_op = p_load_ops[i];
+				description.store_op = p_store_ops[i];
+				description.stencil_load_op = p_load_ops[i];
+				description.stencil_store_op = p_store_ops[i];
+				description.initial_layout = RDD::TEXTURE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+				description.final_layout = RDD::TEXTURE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+			} else if (p_attachments[i].usage_flags & TEXTURE_USAGE_DEPTH_RESOLVE_ATTACHMENT_BIT) {
 				description.load_op = p_load_ops[i];
 				description.store_op = p_store_ops[i];
 				description.stencil_load_op = p_load_ops[i];
@@ -2610,6 +2618,21 @@ RDD::RenderPassID RenderingDevice::_render_pass_create(RenderingDeviceDriver *p_
 				is_multisample_first = false;
 			} else {
 				ERR_FAIL_COND_V_MSG(texture_samples != p_attachments[attachment].samples, RDD::RenderPassID(), "Invalid framebuffer depth format attachment(" + itos(attachment) + "), in pass (" + itos(i) + "), if an attachment is marked as multisample, all of them should be multisample and use the same number of samples including the depth.");
+			}
+
+			if (pass->depth_resolve_attachment != ATTACHMENT_UNUSED) {
+				attachment = pass->depth_resolve_attachment;
+
+				// As our fallbacks are handled outside of our pass, we should never be setting up a render pass with a depth resolve attachment when not supported.
+				ERR_FAIL_COND_V_MSG(!p_driver->has_feature(SUPPORTS_FRAMEBUFFER_DEPTH_RESOLVE), RDD::RenderPassID(), "Invalid framebuffer depth format attachment(" + itos(attachment) + "), in pass (" + itos(i) + "), a depth resolve attachment was supplied when driver doesn't support this feature.");
+
+				ERR_FAIL_INDEX_V_MSG(attachment, p_attachments.size(), RDD::RenderPassID(), "Invalid framebuffer depth resolve format attachment(" + itos(attachment) + "), in pass (" + itos(i) + "), depth resolve attachment.");
+				ERR_FAIL_COND_V_MSG(!(p_attachments[attachment].usage_flags & TEXTURE_USAGE_DEPTH_RESOLVE_ATTACHMENT_BIT), RDD::RenderPassID(), "Invalid framebuffer depth resolve format attachment(" + itos(attachment) + "), in pass (" + itos(i) + "), it's marked as depth, but it's not a depth resolve attachment.");
+				ERR_FAIL_COND_V_MSG(attachment_last_pass[attachment] == i, RDD::RenderPassID(), "Invalid framebuffer depth resolve format attachment(" + itos(attachment) + "), in pass (" + itos(i) + "), it already was used for something else before in this pass.");
+
+				subpass.depth_resolve_reference.attachment = attachment_remap[attachment];
+				subpass.depth_resolve_reference.layout = RDD::TEXTURE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+				attachment_last_pass[attachment] = i;
 			}
 
 		} else {
@@ -2756,6 +2779,8 @@ RenderingDevice::FramebufferFormatID RenderingDevice::framebuffer_format_create(
 	for (int i = 0; i < p_format.size(); i++) {
 		if (p_format[i].usage_flags & TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) {
 			pass.depth_attachment = i;
+		} else if (p_format[i].usage_flags & TEXTURE_USAGE_DEPTH_RESOLVE_ATTACHMENT_BIT) {
+			pass.depth_resolve_attachment = i;
 		} else {
 			pass.color_attachments.push_back(i);
 		}
@@ -2902,6 +2927,8 @@ RID RenderingDevice::framebuffer_create(const Vector<RID> &p_texture_attachments
 
 		if (texture && texture->usage_flags & TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) {
 			pass.depth_attachment = i;
+		} else if (texture && texture->usage_flags & TEXTURE_USAGE_DEPTH_RESOLVE_ATTACHMENT_BIT) {
+			pass.depth_resolve_attachment = i;
 		} else if (texture && texture->usage_flags & TEXTURE_USAGE_VRS_ATTACHMENT_BIT) {
 			// Prevent the VRS attachment from being added to the color_attachments.
 		} else {
@@ -3088,6 +3115,12 @@ RID RenderingDevice::vertex_buffer_create(uint32_t p_size_bytes, Span<uint8_t> p
 	if (p_creation_bits.has_flag(BUFFER_CREATION_AS_STORAGE_BIT)) {
 		buffer.usage.set_flag(RDD::BUFFER_USAGE_STORAGE_BIT);
 	}
+	if (p_creation_bits.has_flag(BUFFER_CREATION_DYNAMIC_PERSISTENT_BIT)) {
+		buffer.usage.set_flag(RDD::BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT);
+
+		// Persistent buffers expect frequent CPU -> GPU writes, so GPU writes should avoid the same path.
+		buffer.usage.clear_flag(RDD::BUFFER_USAGE_TRANSFER_TO_BIT);
+	}
 	if (p_creation_bits.has_flag(BUFFER_CREATION_DEVICE_ADDRESS_BIT)) {
 		buffer.usage.set_flag(RDD::BUFFER_USAGE_DEVICE_ADDRESS_BIT);
 	}
@@ -3095,7 +3128,7 @@ RID RenderingDevice::vertex_buffer_create(uint32_t p_size_bytes, Span<uint8_t> p
 	ERR_FAIL_COND_V(!buffer.driver_id, RID());
 
 	// Vertex buffers are assumed to be immutable unless they don't have initial data or they've been marked for storage explicitly.
-	if (p_data.is_empty() || p_creation_bits.has_flag(BUFFER_CREATION_AS_STORAGE_BIT)) {
+	if (p_data.is_empty() || p_creation_bits.has_flag(BUFFER_CREATION_AS_STORAGE_BIT) || p_creation_bits.has_flag(BUFFER_CREATION_DYNAMIC_PERSISTENT_BIT)) {
 		buffer.draw_tracker = RDG::resource_tracker_create();
 		buffer.draw_tracker->buffer_driver_id = buffer.driver_id;
 	}
@@ -3127,24 +3160,49 @@ RenderingDevice::VertexFormatID RenderingDevice::vertex_format_create(const Vect
 		return *idptr;
 	}
 
+	VertexAttributeBindingsMap bindings;
+	bool has_implicit = false;
+	bool has_explicit = false;
+	Vector<VertexAttribute> vertex_descriptions = p_vertex_descriptions;
 	HashSet<int> used_locations;
-	for (int i = 0; i < p_vertex_descriptions.size(); i++) {
-		ERR_CONTINUE(p_vertex_descriptions[i].format >= DATA_FORMAT_MAX);
-		ERR_FAIL_COND_V(used_locations.has(p_vertex_descriptions[i].location), INVALID_ID);
+	for (int i = 0; i < vertex_descriptions.size(); i++) {
+		VertexAttribute &attr = vertex_descriptions.write[i];
+		ERR_CONTINUE(attr.format >= DATA_FORMAT_MAX);
+		ERR_FAIL_COND_V(used_locations.has(attr.location), INVALID_ID);
 
-		ERR_FAIL_COND_V_MSG(get_format_vertex_size(p_vertex_descriptions[i].format) == 0, INVALID_ID,
-				"Data format for attachment (" + itos(i) + "), '" + FORMAT_NAMES[p_vertex_descriptions[i].format] + "', is not valid for a vertex array.");
+		ERR_FAIL_COND_V_MSG(get_format_vertex_size(attr.format) == 0, INVALID_ID,
+				vformat("Data format for attribute (%d), '%s', is not valid for a vertex array.", attr.location, String(FORMAT_NAMES[attr.format])));
 
-		used_locations.insert(p_vertex_descriptions[i].location);
+		if (attr.binding == UINT32_MAX) {
+			attr.binding = i; // Implicitly assigned binding
+			has_implicit = true;
+		} else {
+			has_explicit = true;
+		}
+		ERR_FAIL_COND_V_MSG(!(has_implicit ^ has_explicit), INVALID_ID, "Vertex attributes must use either all explicit or all implicit bindings.");
+
+		const VertexAttributeBinding *existing = bindings.getptr(attr.binding);
+		if (!existing) {
+			bindings.insert(attr.binding, VertexAttributeBinding(attr.stride, attr.frequency));
+		} else {
+			ERR_FAIL_COND_V_MSG(existing->stride != attr.stride, INVALID_ID,
+					vformat("Vertex attributes with binding (%d) have an inconsistent stride.", attr.binding));
+			ERR_FAIL_COND_V_MSG(existing->frequency != attr.frequency, INVALID_ID,
+					vformat("Vertex attributes with binding (%d) have an inconsistent frequency.", attr.binding));
+		}
+
+		used_locations.insert(attr.location);
 	}
 
-	RDD::VertexFormatID driver_id = driver->vertex_format_create(p_vertex_descriptions);
+	RDD::VertexFormatID driver_id = driver->vertex_format_create(vertex_descriptions, bindings);
 	ERR_FAIL_COND_V(!driver_id, 0);
 
 	VertexFormatID id = (vertex_format_cache.size() | ((int64_t)ID_TYPE_VERTEX_FORMAT << ID_BASE_SHIFT));
 	vertex_format_cache[key] = id;
-	vertex_formats[id].vertex_formats = p_vertex_descriptions;
-	vertex_formats[id].driver_id = driver_id;
+	VertexDescriptionCache &ce = vertex_formats.insert(id, VertexDescriptionCache())->value;
+	ce.vertex_formats = vertex_descriptions;
+	ce.bindings = std::move(bindings);
+	ce.driver_id = driver_id;
 	return id;
 }
 
@@ -3153,12 +3211,6 @@ RID RenderingDevice::vertex_array_create(uint32_t p_vertex_count, VertexFormatID
 
 	ERR_FAIL_COND_V(!vertex_formats.has(p_vertex_format), RID());
 	const VertexDescriptionCache &vd = vertex_formats[p_vertex_format];
-
-	ERR_FAIL_COND_V(vd.vertex_formats.size() != p_src_buffers.size(), RID());
-
-	for (int i = 0; i < p_src_buffers.size(); i++) {
-		ERR_FAIL_COND_V(!vertex_buffer_owner.owns(p_src_buffers[i]), RID());
-	}
 
 	VertexArray vertex_array;
 
@@ -3172,39 +3224,53 @@ RID RenderingDevice::vertex_array_create(uint32_t p_vertex_count, VertexFormatID
 	vertex_array.vertex_count = p_vertex_count;
 	vertex_array.description = p_vertex_format;
 	vertex_array.max_instances_allowed = 0xFFFFFFFF; // By default as many as you want.
-	for (int i = 0; i < p_src_buffers.size(); i++) {
-		Buffer *buffer = vertex_buffer_owner.get_or_null(p_src_buffers[i]);
+	vertex_array.buffers.resize(p_src_buffers.size());
+
+	HashSet<RID> unique_buffers;
+	unique_buffers.reserve(p_src_buffers.size());
+
+	for (const VertexAttribute &atf : vd.vertex_formats) {
+		ERR_FAIL_COND_V_MSG(atf.binding >= p_src_buffers.size(), RID(), vformat("Vertex attribute location (%d) is missing a buffer for binding (%d).", atf.location, atf.binding));
+		RID buf = p_src_buffers[atf.binding];
+		ERR_FAIL_COND_V(!vertex_buffer_owner.owns(buf), RID());
+
+		Buffer *buffer = vertex_buffer_owner.get_or_null(buf);
 
 		// Validate with buffer.
 		{
-			const VertexAttribute &atf = vd.vertex_formats[i];
-
 			uint32_t element_size = get_format_vertex_size(atf.format);
-			ERR_FAIL_COND_V(element_size == 0, RID()); // Should never happens since this was prevalidated.
+			ERR_FAIL_COND_V(element_size == 0, RID()); // Should never happen since this was prevalidated.
 
 			if (atf.frequency == VERTEX_FREQUENCY_VERTEX) {
 				// Validate size for regular drawing.
 				uint64_t total_size = uint64_t(atf.stride) * (p_vertex_count - 1) + atf.offset + element_size;
 				ERR_FAIL_COND_V_MSG(total_size > buffer->size, RID(),
-						"Attachment (" + itos(i) + ") will read past the end of the buffer.");
+						vformat("Vertex attribute (%d) will read past the end of the buffer.", atf.location));
 
 			} else {
 				// Validate size for instances drawing.
 				uint64_t available = buffer->size - atf.offset;
 				ERR_FAIL_COND_V_MSG(available < element_size, RID(),
-						"Attachment (" + itos(i) + ") uses instancing, but it's just too small.");
+						vformat("Vertex attribute (%d) uses instancing, but it's just too small.", atf.location));
 
 				uint32_t instances_allowed = available / atf.stride;
 				vertex_array.max_instances_allowed = MIN(instances_allowed, vertex_array.max_instances_allowed);
 			}
 		}
 
-		vertex_array.buffers.push_back(buffer->driver_id);
+		vertex_array.buffers.write[atf.binding] = buffer->driver_id;
+
+		if (unique_buffers.has(buf)) {
+			// No need to add dependencies multiple times.
+			continue;
+		}
+
+		unique_buffers.insert(buf);
 
 		if (buffer->draw_tracker != nullptr) {
 			vertex_array.draw_trackers.push_back(buffer->draw_tracker);
 		} else {
-			vertex_array.untracked_buffers.insert(p_src_buffers[i]);
+			vertex_array.untracked_buffers.insert(buf);
 		}
 
 		if (buffer->transfer_worker_index >= 0) {
@@ -3214,8 +3280,8 @@ RID RenderingDevice::vertex_array_create(uint32_t p_vertex_count, VertexFormatID
 	}
 
 	RID id = vertex_array_owner.make_rid(vertex_array);
-	for (int i = 0; i < p_src_buffers.size(); i++) {
-		_add_dependency(id, p_src_buffers[i]);
+	for (const RID &buf : unique_buffers) {
+		_add_dependency(id, buf);
 	}
 
 	return id;
@@ -3621,7 +3687,7 @@ RID RenderingDevice::uniform_set_create(const VectorView<RD::Uniform> &p_uniform
 					ERR_FAIL_COND_V_MSG(!(texture->usage_flags & TEXTURE_USAGE_SAMPLING_BIT), RID(),
 							"Texture (binding: " + itos(uniform.binding) + ", index " + itos(j) + ") needs the TEXTURE_USAGE_SAMPLING_BIT usage flag set in order to be used as uniform.");
 
-					if ((texture->usage_flags & (TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | TEXTURE_USAGE_INPUT_ATTACHMENT_BIT))) {
+					if ((texture->usage_flags & (TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | TEXTURE_USAGE_DEPTH_RESOLVE_ATTACHMENT_BIT | TEXTURE_USAGE_INPUT_ATTACHMENT_BIT))) {
 						UniformSet::AttachableTexture attachable_texture;
 						attachable_texture.bind = set_uniform.binding;
 						attachable_texture.texture = texture->owner.is_valid() ? texture->owner : uniform.get_id(j + 1);
@@ -3667,7 +3733,7 @@ RID RenderingDevice::uniform_set_create(const VectorView<RD::Uniform> &p_uniform
 					ERR_FAIL_COND_V_MSG(!(texture->usage_flags & TEXTURE_USAGE_SAMPLING_BIT), RID(),
 							"Texture (binding: " + itos(uniform.binding) + ", index " + itos(j) + ") needs the TEXTURE_USAGE_SAMPLING_BIT usage flag set in order to be used as uniform.");
 
-					if ((texture->usage_flags & (TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | TEXTURE_USAGE_INPUT_ATTACHMENT_BIT))) {
+					if ((texture->usage_flags & (TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | TEXTURE_USAGE_DEPTH_RESOLVE_ATTACHMENT_BIT | TEXTURE_USAGE_INPUT_ATTACHMENT_BIT))) {
 						UniformSet::AttachableTexture attachable_texture;
 						attachable_texture.bind = set_uniform.binding;
 						attachable_texture.texture = texture->owner.is_valid() ? texture->owner : uniform.get_id(j);
@@ -4450,7 +4516,7 @@ RenderingDevice::DrawListID RenderingDevice::draw_list_begin(RID p_framebuffer, 
 			resource_usages.push_back(RDG::RESOURCE_USAGE_ATTACHMENT_COLOR_READ_WRITE);
 			stages.set_flag(RDD::PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
 			color_index++;
-		} else if (texture->usage_flags & TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) {
+		} else if (texture->usage_flags & (TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | TEXTURE_USAGE_DEPTH_RESOLVE_ATTACHMENT_BIT)) {
 			if (p_draw_flags.has_flag(DRAW_CLEAR_DEPTH) || p_draw_flags.has_flag(DRAW_CLEAR_STENCIL)) {
 				operation = RDG::ATTACHMENT_OPERATION_CLEAR;
 				clear_value.depth = p_clear_depth_value;
@@ -4665,6 +4731,102 @@ void RenderingDevice::draw_list_bind_vertex_array(DrawListID p_list, RID p_verte
 	for (int i = 0; i < vertex_array->draw_trackers.size(); i++) {
 		draw_graph.add_draw_list_usage(vertex_array->draw_trackers[i], RDG::RESOURCE_USAGE_VERTEX_BUFFER_READ);
 	}
+}
+
+void RenderingDevice::draw_list_bind_vertex_buffers_format(DrawListID p_list, VertexFormatID p_vertex_format, uint32_t p_vertex_count, const Span<RID> &p_vertex_buffers, const Span<uint64_t> &p_offsets) {
+	ERR_RENDER_THREAD_GUARD();
+
+	ERR_FAIL_COND(!draw_list.active);
+
+	const VertexDescriptionCache *vertex_description = vertex_formats.getptr(p_vertex_format);
+	ERR_FAIL_NULL_MSG(vertex_description, "Supplied vertex format does not exist.");
+
+	Span<uint64_t> offsets_span = p_offsets;
+	FixedVector<uint64_t, 32> offsets;
+	if (offsets_span.is_empty()) {
+		offsets.resize_initialized(p_vertex_buffers.size());
+		offsets_span = offsets;
+	} else {
+		ERR_FAIL_COND_MSG(offsets_span.size() != p_vertex_buffers.size(),
+				"Number of vertex buffer offsets (" + itos(offsets_span.size()) + ") does not match number of vertex buffers (" + itos(p_vertex_buffers.size()) + ").");
+	}
+
+	FixedVector<RDD::BufferID, 32> driver_buffers;
+	driver_buffers.resize_initialized(p_vertex_buffers.size());
+
+	FixedVector<RDG::ResourceTracker *, 32> draw_trackers;
+
+#if DEBUG_ENABLED
+	uint32_t max_instances_allowed = 0xFFFFFFFF;
+#endif
+
+	for (uint32_t i = 0; i < p_vertex_buffers.size(); i++) {
+		RID buffer_rid = p_vertex_buffers[i];
+		if (buffer_rid.is_null()) {
+			// The buffer array can be sparse.
+			continue;
+		}
+		ERR_FAIL_COND_MSG(!vertex_buffer_owner.owns(buffer_rid), "Vertex buffer at index " + itos(i) + " is invalid.");
+
+		Buffer *buffer = vertex_buffer_owner.get_or_null(buffer_rid);
+		ERR_FAIL_NULL(buffer);
+
+		_check_transfer_worker_buffer(buffer);
+
+#if DEBUG_ENABLED
+		uint64_t binding_offset = offsets_span[i];
+		ERR_FAIL_COND_MSG(binding_offset > buffer->size, "Vertex buffer offset for attachment (" + itos(i) + ") exceeds buffer size.");
+
+		const VertexAttribute &attribute = vertex_description->vertex_formats[i];
+		uint32_t element_size = get_format_vertex_size(attribute.format);
+		ERR_FAIL_COND_MSG(element_size == 0, "Vertex attribute format for attachment (" + itos(i) + ") is invalid.");
+
+		uint64_t attribute_offset = binding_offset + attribute.offset;
+		ERR_FAIL_COND_MSG(attribute_offset > buffer->size, "Vertex attribute offset for attachment (" + itos(i) + ") exceeds buffer size.");
+		ERR_FAIL_COND_MSG(attribute_offset + element_size > buffer->size,
+				"Vertex buffer (" + itos(i) + ") will read past the end of the buffer.");
+
+		if (attribute.frequency == VERTEX_FREQUENCY_VERTEX) {
+			ERR_FAIL_COND_MSG(p_vertex_count == 0, "Vertex count must be greater than 0 when binding vertex buffers.");
+
+			uint64_t required_size = attribute_offset + element_size;
+			if (p_vertex_count > 1) {
+				required_size += uint64_t(attribute.stride) * (uint64_t(p_vertex_count) - 1);
+			}
+
+			ERR_FAIL_COND_MSG(required_size > buffer->size,
+					"Vertex buffer (" + itos(i) + ") will read past the end of the buffer.");
+		} else {
+			uint64_t available = buffer->size - attribute_offset;
+			ERR_FAIL_COND_MSG(available < element_size,
+					"Vertex buffer (" + itos(i) + ") uses instancing, but it's just too small.");
+
+			uint32_t instances_allowed = attribute.stride == 0 ? 0 : uint32_t(buffer->size / attribute.stride);
+			max_instances_allowed = MIN(instances_allowed, max_instances_allowed);
+		}
+#endif
+
+		driver_buffers[i] = buffer->driver_id;
+
+		if (buffer->draw_tracker != nullptr) {
+			draw_trackers.push_back(buffer->draw_tracker);
+		}
+	}
+
+	draw_list.state.vertex_array = RID();
+
+	draw_graph.add_draw_list_bind_vertex_buffers(driver_buffers, offsets_span);
+
+	for (RDG::ResourceTracker *tracker : draw_trackers) {
+		draw_graph.add_draw_list_usage(tracker, RDG::RESOURCE_USAGE_VERTEX_BUFFER_READ);
+	}
+
+	draw_list.validation.vertex_array_size = p_vertex_count;
+
+#ifdef DEBUG_ENABLED
+	draw_list.validation.vertex_format = p_vertex_format;
+	draw_list.validation.vertex_max_instances_allowed = max_instances_allowed;
+#endif
 }
 
 void RenderingDevice::draw_list_bind_index_array(DrawListID p_list, RID p_index_array) {
@@ -5084,6 +5246,9 @@ void RenderingDevice::draw_list_end() {
 			texture->bound = false;
 		}
 		if (texture->usage_flags & TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) {
+			texture->bound = false;
+		}
+		if (texture->usage_flags & TEXTURE_USAGE_DEPTH_RESOLVE_ATTACHMENT_BIT) {
 			texture->bound = false;
 		}
 	}
@@ -6782,18 +6947,31 @@ Error RenderingDevice::initialize(RenderingContextDriver *p_context, DisplayServ
 	frames.resize(frame_count);
 
 	// Create data for all the frames.
+	bool frame_failed = false;
 	for (uint32_t i = 0; i < frames.size(); i++) {
 		frames[i].index = 0;
 
 		// Create command pool, command buffers, semaphores and fences.
 		frames[i].command_pool = driver->command_pool_create(main_queue_family, RDD::COMMAND_BUFFER_TYPE_PRIMARY);
-		ERR_FAIL_COND_V(!frames[i].command_pool, FAILED);
+		if (!frames[i].command_pool) {
+			frame_failed = true;
+			break;
+		}
 		frames[i].command_buffer = driver->command_buffer_create(frames[i].command_pool);
-		ERR_FAIL_COND_V(!frames[i].command_buffer, FAILED);
+		if (!frames[i].command_buffer) {
+			frame_failed = true;
+			break;
+		}
 		frames[i].semaphore = driver->semaphore_create();
-		ERR_FAIL_COND_V(!frames[i].semaphore, FAILED);
+		if (!frames[i].semaphore) {
+			frame_failed = true;
+			break;
+		}
 		frames[i].fence = driver->fence_create();
-		ERR_FAIL_COND_V(!frames[i].fence, FAILED);
+		if (!frames[i].fence) {
+			frame_failed = true;
+			break;
+		}
 		frames[i].fence_signaled = false;
 
 		// Create query pool.
@@ -6813,8 +6991,35 @@ Error RenderingDevice::initialize(RenderingContextDriver *p_context, DisplayServ
 		frames[i].transfer_worker_semaphores.resize(transfer_worker_pool_max_size);
 		for (uint32_t j = 0; j < transfer_worker_pool_max_size; j++) {
 			frames[i].transfer_worker_semaphores[j] = driver->semaphore_create();
-			ERR_FAIL_COND_V(!frames[i].transfer_worker_semaphores[j], FAILED);
+			if (!frames[i].transfer_worker_semaphores[j]) {
+				frame_failed = true;
+				break;
+			}
 		}
+	}
+	if (frame_failed) {
+		// Clean up created data.
+		for (uint32_t i = 0; i < frames.size(); i++) {
+			if (frames[i].command_pool) {
+				driver->command_pool_free(frames[i].command_pool);
+			}
+			if (frames[i].semaphore) {
+				driver->semaphore_free(frames[i].semaphore);
+			}
+			if (frames[i].fence) {
+				driver->fence_free(frames[i].fence);
+			}
+			if (frames[i].timestamp_pool) {
+				driver->timestamp_query_pool_free(frames[i].timestamp_pool);
+			}
+			for (uint32_t j = 0; j < frames[i].transfer_worker_semaphores.size(); j++) {
+				if (frames[i].transfer_worker_semaphores[j]) {
+					driver->semaphore_free(frames[i].transfer_worker_semaphores[j]);
+				}
+			}
+		}
+		frames.clear();
+		ERR_FAIL_V_MSG(FAILED, "Failed to create frame data.");
 	}
 
 	// Start from frame count, so everything else is immediately old.
@@ -7431,6 +7636,7 @@ void RenderingDevice::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("draw_list_bind_render_pipeline", "draw_list", "render_pipeline"), &RenderingDevice::draw_list_bind_render_pipeline);
 	ClassDB::bind_method(D_METHOD("draw_list_bind_uniform_set", "draw_list", "uniform_set", "set_index"), &RenderingDevice::draw_list_bind_uniform_set);
 	ClassDB::bind_method(D_METHOD("draw_list_bind_vertex_array", "draw_list", "vertex_array"), &RenderingDevice::draw_list_bind_vertex_array);
+	ClassDB::bind_method(D_METHOD("draw_list_bind_vertex_buffers_format", "draw_list", "vertex_format", "vertex_count", "vertex_buffers", "offsets"), &RenderingDevice::_draw_list_bind_vertex_buffers_format, DEFVAL(Vector<int64_t>()));
 	ClassDB::bind_method(D_METHOD("draw_list_bind_index_array", "draw_list", "index_array"), &RenderingDevice::draw_list_bind_index_array);
 	ClassDB::bind_method(D_METHOD("draw_list_set_push_constant", "draw_list", "buffer", "size_bytes"), &RenderingDevice::_draw_list_set_push_constant);
 
@@ -7809,6 +8015,7 @@ void RenderingDevice::_bind_methods() {
 	BIND_BITFIELD_FLAG(TEXTURE_USAGE_SAMPLING_BIT);
 	BIND_BITFIELD_FLAG(TEXTURE_USAGE_COLOR_ATTACHMENT_BIT);
 	BIND_BITFIELD_FLAG(TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
+	BIND_BITFIELD_FLAG(TEXTURE_USAGE_DEPTH_RESOLVE_ATTACHMENT_BIT);
 	BIND_BITFIELD_FLAG(TEXTURE_USAGE_STORAGE_BIT);
 	BIND_BITFIELD_FLAG(TEXTURE_USAGE_STORAGE_ATOMIC_BIT);
 	BIND_BITFIELD_FLAG(TEXTURE_USAGE_CPU_READ_BIT);
@@ -8232,6 +8439,18 @@ RID RenderingDevice::_vertex_array_create(uint32_t p_vertex_count, VertexFormatI
 	}
 
 	return vertex_array_create(p_vertex_count, p_vertex_format, buffers, offsets);
+}
+
+void RenderingDevice::_draw_list_bind_vertex_buffers_format(DrawListID p_list, VertexFormatID p_vertex_format, uint32_t p_vertex_count, const TypedArray<RID> &p_vertex_buffers, const Vector<int64_t> &p_offsets) {
+	Vector<RID> buffers = Variant(p_vertex_buffers);
+
+	Vector<uint64_t> offsets;
+	offsets.resize(p_offsets.size());
+	for (int i = 0; i < p_offsets.size(); i++) {
+		offsets.write[i] = p_offsets[i];
+	}
+
+	draw_list_bind_vertex_buffers_format(p_list, p_vertex_format, p_vertex_count, buffers, offsets);
 }
 
 Ref<RDShaderSPIRV> RenderingDevice::_shader_compile_spirv_from_source(const Ref<RDShaderSource> &p_source, bool p_allow_cache) {

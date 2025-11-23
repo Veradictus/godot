@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  rid_owner.cpp                                                         */
+/*  editor_shader_language_plugin.h                                       */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */
@@ -28,6 +28,30 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#include "rid_owner.h"
+#pragma once
 
-SafeNumeric<uint64_t> RID_AllocBase::base_id{ 1 };
+#include "shader_editor.h"
+
+class EditorShaderLanguagePlugin : public RefCounted {
+	GDCLASS(EditorShaderLanguagePlugin, RefCounted);
+
+	static Vector<Ref<EditorShaderLanguagePlugin>> shader_languages;
+	static Vector<Vector2i> language_variation_map;
+
+public:
+	static void register_shader_language(const Ref<EditorShaderLanguagePlugin> &p_shader_language);
+	static void clear_registered_shader_languages();
+	static const Vector<Ref<EditorShaderLanguagePlugin>> get_shader_languages_read_only();
+	static int get_shader_language_variation_count();
+	static Ref<EditorShaderLanguagePlugin> get_shader_language_for_index(int p_index);
+	static String get_file_extension_for_index(int p_index);
+
+	virtual bool handles_shader(const Ref<Shader> &p_shader) const = 0;
+	virtual bool handles_shader_include(const Ref<ShaderInclude> &p_shader_inc) const { return false; }
+	virtual ShaderEditor *edit_shader(const Ref<Shader> &p_shader) = 0;
+	virtual ShaderEditor *edit_shader_include(const Ref<ShaderInclude> &p_shader_inc) { return nullptr; }
+	virtual Ref<Shader> create_new_shader(int p_variation_index, Shader::Mode p_shader_mode, int p_template_index) = 0;
+	virtual Ref<ShaderInclude> create_new_shader_include() { return Ref<ShaderInclude>(); }
+	virtual PackedStringArray get_language_variations() const = 0;
+	virtual String get_file_extension(int p_variation_index) const { return "tres"; }
+};

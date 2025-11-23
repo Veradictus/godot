@@ -491,13 +491,15 @@ Error RenderingDeviceDriverD3D12::CPUDescriptorsHeapPool::release(const CPUDescr
 	} else if (next != free_blocks_by_offset.end()) {
 		// Connects to the next block.
 		remove_from_size_map(next->value);
+
+		FreeBlockInfo merged_block = next->value;
+		merged_block.global_offset -= p_result.count;
+		merged_block.size += p_result.count;
+
+		// Replace with the merged block.
 		free_blocks_by_offset.erase(next->value.global_offset);
-
-		next->value.global_offset -= p_result.count;
-		next->value.size += p_result.count;
-
-		DEV_ASSERT(!free_blocks_by_offset.has(next->value.global_offset));
-		new_block = free_blocks_by_offset.insert(next->value.global_offset, next->value);
+		DEV_ASSERT(!free_blocks_by_offset.has(merged_block.global_offset));
+		new_block = free_blocks_by_offset.insert(merged_block.global_offset, merged_block);
 	} else {
 		// Connects to no block.
 		new_block = free_blocks_by_offset.insert(global_offset, FreeBlockInfo{ p_result.heap, global_offset, p_result.base_offset, p_result.count });
@@ -1059,6 +1061,11 @@ RDD::BufferID RenderingDeviceDriverD3D12::buffer_create(uint64_t p_size, BitFiel
 			if (p_usage.has_flag(BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT)) {
 				allocation_desc.HeapType = dynamic_persistent_upload_heap;
 
+				// D3D12_HEAP_TYPE_UPLOAD mandates D3D12_RESOURCE_STATE_GENERIC_READ.
+				if (dynamic_persistent_upload_heap == D3D12_HEAP_TYPE_UPLOAD) {
+					initial_state = D3D12_RESOURCE_STATE_GENERIC_READ;
+				}
+
 				// We can't use STORAGE for write access, just for read.
 				resource_desc.Flags = resource_desc.Flags & ~D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
 			}
@@ -1163,6 +1170,24 @@ uint8_t *RenderingDeviceDriverD3D12::buffer_persistent_map_advance(BufferID p_bu
 #endif
 	buf_info->frame_idx = (buf_info->frame_idx + 1u) % frames.size();
 	return buf_info->persistent_ptr + buf_info->frame_idx * buf_info->size;
+}
+
+uint64_t RenderingDeviceDriverD3D12::buffer_get_dynamic_offsets(Span<BufferID> p_buffers) {
+	uint64_t mask = 0u;
+	uint64_t shift = 0u;
+
+	for (const BufferID &buf : p_buffers) {
+		const BufferInfo *buf_info = (const BufferInfo *)buf.id;
+		if (!buf_info->is_dynamic()) {
+			continue;
+		}
+		const BufferDynamicInfo *dyn_buf = (const BufferDynamicInfo *)buf.id;
+		mask |= dyn_buf->frame_idx << shift;
+		// We can encode the frame index in 2 bits since frame_count won't be > 4.
+		shift += 2UL;
+	}
+
+	return mask;
 }
 
 uint64_t RenderingDeviceDriverD3D12::buffer_get_device_address(BufferID p_buffer) {
@@ -2183,27 +2208,36 @@ bool RenderingDeviceDriverD3D12::sampler_is_format_supported_for_filter(DataForm
 /**** VERTEX ARRAY ****/
 /**********************/
 
-RDD::VertexFormatID RenderingDeviceDriverD3D12::vertex_format_create(VectorView<VertexAttribute> p_vertex_attribs) {
+RDD::VertexFormatID RenderingDeviceDriverD3D12::vertex_format_create(Span<VertexAttribute> p_vertex_attribs, const VertexAttributeBindingsMap &p_vertex_bindings) {
 	VertexFormatInfo *vf_info = VersatileResource::allocate<VertexFormatInfo>(resources_allocator);
-
 	vf_info->input_elem_descs.resize(p_vertex_attribs.size());
-	vf_info->vertex_buffer_strides.resize(p_vertex_attribs.size());
+
+	uint32_t max_binding = 0;
 	for (uint32_t i = 0; i < p_vertex_attribs.size(); i++) {
-		vf_info->input_elem_descs[i] = {};
-		vf_info->input_elem_descs[i].SemanticName = "TEXCOORD";
-		vf_info->input_elem_descs[i].SemanticIndex = p_vertex_attribs[i].location;
-		vf_info->input_elem_descs[i].Format = RD_TO_D3D12_FORMAT[p_vertex_attribs[i].format].general_format;
-		vf_info->input_elem_descs[i].InputSlot = i; // TODO: Can the same slot be used if data comes from the same buffer (regardless format)?
-		vf_info->input_elem_descs[i].AlignedByteOffset = p_vertex_attribs[i].offset;
-		if (p_vertex_attribs[i].frequency == VERTEX_FREQUENCY_INSTANCE) {
-			vf_info->input_elem_descs[i].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA;
-			vf_info->input_elem_descs[i].InstanceDataStepRate = 1;
+		D3D12_INPUT_ELEMENT_DESC &input_element_desc = vf_info->input_elem_descs[i];
+		const VertexAttribute &vertex_attrib = p_vertex_attribs[i];
+		const VertexAttributeBinding &vertex_binding = p_vertex_bindings[vertex_attrib.binding];
+
+		input_element_desc = {};
+		input_element_desc.SemanticName = "TEXCOORD";
+		input_element_desc.SemanticIndex = vertex_attrib.location;
+		input_element_desc.Format = RD_TO_D3D12_FORMAT[vertex_attrib.format].general_format;
+		input_element_desc.InputSlot = vertex_attrib.binding;
+		input_element_desc.AlignedByteOffset = vertex_attrib.offset;
+		if (vertex_binding.frequency == VERTEX_FREQUENCY_INSTANCE) {
+			input_element_desc.InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA;
+			input_element_desc.InstanceDataStepRate = 1;
 		} else {
-			vf_info->input_elem_descs[i].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
-			vf_info->input_elem_descs[i].InstanceDataStepRate = 0;
+			input_element_desc.InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
+			input_element_desc.InstanceDataStepRate = 0;
 		}
 
-		vf_info->vertex_buffer_strides[i] = p_vertex_attribs[i].stride;
+		max_binding = MAX(max_binding, vertex_attrib.binding + 1);
+	}
+
+	vf_info->vertex_buffer_strides.resize(max_binding);
+	for (const VertexAttributeBindingsMap::KV &vertex_binding_pair : p_vertex_bindings) {
+		vf_info->vertex_buffer_strides[vertex_binding_pair.key] = vertex_binding_pair.value.stride;
 	}
 
 	return VertexFormatID(vf_info);
@@ -5378,7 +5412,7 @@ void RenderingDeviceDriverD3D12::command_render_draw_indirect_count(CommandBuffe
 	cmd_buf_info->cmd_list->ExecuteIndirect(indirect_cmd_signatures.draw.Get(), p_max_draw_count, indirect_buf_info->resource, p_offset, count_buf_info->resource, p_count_buffer_offset);
 }
 
-void RenderingDeviceDriverD3D12::command_render_bind_vertex_buffers(CommandBufferID p_cmd_buffer, uint32_t p_binding_count, const BufferID *p_buffers, const uint64_t *p_offsets) {
+void RenderingDeviceDriverD3D12::command_render_bind_vertex_buffers(CommandBufferID p_cmd_buffer, uint32_t p_binding_count, const BufferID *p_buffers, const uint64_t *p_offsets, uint64_t p_dynamic_offsets) {
 	CommandBufferInfo *cmd_buf_info = (CommandBufferInfo *)p_cmd_buffer.id;
 
 	DEV_ASSERT(cmd_buf_info->render_pass_state.current_subpass != UINT32_MAX);
@@ -5390,8 +5424,15 @@ void RenderingDeviceDriverD3D12::command_render_bind_vertex_buffers(CommandBuffe
 	for (uint32_t i = 0; i < p_binding_count; i++) {
 		BufferInfo *buffer_info = (BufferInfo *)p_buffers[i].id;
 
+		uint32_t dynamic_offset = 0;
+		if (buffer_info->is_dynamic()) {
+			uint64_t buffer_frame_idx = p_dynamic_offsets & 0x3; // Assuming max 4 frames.
+			p_dynamic_offsets >>= 2;
+			dynamic_offset = buffer_frame_idx * buffer_info->size;
+		}
+
 		cmd_buf_info->render_pass_state.vertex_buffer_views[i] = {};
-		cmd_buf_info->render_pass_state.vertex_buffer_views[i].BufferLocation = buffer_info->resource->GetGPUVirtualAddress() + p_offsets[i];
+		cmd_buf_info->render_pass_state.vertex_buffer_views[i].BufferLocation = buffer_info->resource->GetGPUVirtualAddress() + dynamic_offset + p_offsets[i];
 		cmd_buf_info->render_pass_state.vertex_buffer_views[i].SizeInBytes = buffer_info->size - p_offsets[i];
 		if (!barrier_capabilities.enhanced_barriers_supported) {
 			_resource_transition_batch(cmd_buf_info, buffer_info, 0, 1, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
@@ -6204,7 +6245,7 @@ uint64_t RenderingDeviceDriverD3D12::api_trait_get(ApiTrait p_trait) {
 bool RenderingDeviceDriverD3D12::has_feature(Features p_feature) {
 	switch (p_feature) {
 		case SUPPORTS_HALF_FLOAT:
-			return shader_capabilities.native_16bit_ops && storage_buffer_capabilities.storage_buffer_16_bit_access_is_supported;
+			return shader_capabilities.native_16bit_ops;
 		case SUPPORTS_FRAGMENT_SHADER_WITH_ONLY_SIDE_EFFECTS:
 			return true;
 		case SUPPORTS_BUFFER_DEVICE_ADDRESS:
@@ -6434,7 +6475,6 @@ Error RenderingDeviceDriverD3D12::_check_capabilities() {
 	subgroup_capabilities.wave_ops_supported = false;
 	shader_capabilities.shader_model = (D3D_SHADER_MODEL)0;
 	shader_capabilities.native_16bit_ops = false;
-	storage_buffer_capabilities.storage_buffer_16_bit_access_is_supported = false;
 	format_capabilities.relaxed_casting_supported = false;
 
 	{
@@ -6475,9 +6515,8 @@ Error RenderingDeviceDriverD3D12::_check_capabilities() {
 
 	D3D12_FEATURE_DATA_D3D12_OPTIONS options = {};
 	res = device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS, &options, sizeof(options));
-	if (SUCCEEDED(res)) {
-		storage_buffer_capabilities.storage_buffer_16_bit_access_is_supported = options.TypedUAVLoadAdditionalFormats;
-	}
+	ERR_FAIL_COND_V_MSG(!SUCCEEDED(res), ERR_UNAVAILABLE, "CheckFeatureSupport failed with error " + vformat("0x%08ux", (uint64_t)res) + ".");
+	ERR_FAIL_COND_V_MSG(!options.TypedUAVLoadAdditionalFormats, ERR_UNAVAILABLE, "No support for Typed UAV Load Additional Formats has been found.");
 
 	D3D12_FEATURE_DATA_D3D12_OPTIONS1 options1 = {};
 	res = device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS1, &options1, sizeof(options1));

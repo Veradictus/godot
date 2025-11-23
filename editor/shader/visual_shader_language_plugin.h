@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  translation_po.h                                                      */
+/*  visual_shader_language_plugin.h                                       */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */
@@ -30,8 +30,14 @@
 
 #pragma once
 
-#include "core/string/translation.h"
+#include "editor/shader/editor_shader_language_plugin.h"
 
-class TranslationPO : public Translation {
-	GDCLASS(TranslationPO, Translation);
+class VisualShaderLanguagePlugin : public EditorShaderLanguagePlugin {
+	GDCLASS(VisualShaderLanguagePlugin, EditorShaderLanguagePlugin);
+
+public:
+	virtual bool handles_shader(const Ref<Shader> &p_shader) const override;
+	virtual ShaderEditor *edit_shader(const Ref<Shader> &p_shader) override;
+	virtual Ref<Shader> create_new_shader(int p_variation_index, Shader::Mode p_shader_mode, int p_template_index) override;
+	virtual PackedStringArray get_language_variations() const override;
 };
