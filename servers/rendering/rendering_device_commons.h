@@ -630,6 +630,7 @@ public:
 
 	static const uint32_t MAX_UNIFORM_SETS = 16;
 
+	// Keep the enum values in sync with the `SHADER_UNIFORM_NAMES` values (file rendering_device.cpp).
 	enum UniformType {
 		UNIFORM_TYPE_SAMPLER, // For sampling only (sampler GLSL type).
 		UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, // For sampling only, but includes a texture, (samplerXX GLSL type), first a sampler then a texture.
@@ -972,6 +973,7 @@ public:
 		SUPPORTS_IMAGE_ATOMIC_32_BIT,
 		SUPPORTS_VULKAN_MEMORY_MODEL,
 		SUPPORTS_FRAMEBUFFER_DEPTH_RESOLVE,
+		SUPPORTS_POINT_SIZE,
 	};
 
 	enum SubgroupOperations {

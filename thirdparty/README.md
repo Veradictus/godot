@@ -90,6 +90,7 @@ Patches:
 - `0003-remove-tinydds-qoi.patch` (GH-97582)
 - `0004-clang-warning-exclude.patch` (GH-111346)
 - `0005-unused-typedef.patch` (GH-111445)
+- `0006-explicit-includes.patch` (GH-111557)
 
 
 ## brotli
@@ -220,6 +221,7 @@ Patches:
 - `0003-emscripten-nthreads.patch` (GH-69799)
 - `0004-mingw-no-cpuidex.patch` (GH-92488)
 - `0005-mingw-llvm-arm64.patch` (GH-93364)
+- `0006-explicit-includes.patch` (GH-111557)
 
 The `modules/raycast/godot_update_embree.py` script can be used to pull the
 relevant files from the latest Embree release and apply patches automatically.
@@ -566,7 +568,7 @@ Patches:
 ## libogg
 
 - Upstream: https://www.xiph.org/ogg
-- Version: 1.3.5 (e1774cd77f471443541596e09078e78fdc342e4f, 2021)
+- Version: 1.3.6 (be05b13e98b048f0b5a0f5fa8ce514d56db5f822, 2025)
 - License: BSD-3-Clause
 
 Files extracted from upstream source:
@@ -579,7 +581,7 @@ Files extracted from upstream source:
 ## libpng
 
 - Upstream: http://libpng.org/pub/png/libpng.html
-- Version: 1.6.48 (ea127968204cc5d10f3fc9250c306b9e8cbd9b80, 2025)
+- Version: 1.6.51 (49363adcfaf098748d7a4c8c624ad8c45a8c3a86, 2025)
 - License: libpng/zlib
 
 Files extracted from upstream source:
@@ -720,6 +722,7 @@ Patches:
 
 - `0001-disable-exceptions.patch` (GH-85039)
 - `0002-clang-std-replacements-leak.patch` (GH-85208)
+- `0003-explicit-includes.patch` (GH-111557)
 
 
 ## minimp3
@@ -933,6 +936,19 @@ Files extracted from upstream source:
 - `License.txt`
 
 
+## re-spirv
+
+- Upstream: https://github.com/renderbag/re-spirv
+- Version: git (2f9be81bca5882ada1b6377d2ef8c0f7d8665171, 2025)
+- License: MIT
+
+Files extracted from upstream source:
+
+- `re-spirv.cpp`
+- `re-spirv.h`
+- `LICENSE`
+
+
 ## rvo2
 
 For 2D in `rvo2_2d` folder
@@ -1010,6 +1026,16 @@ Versions of this SDK do not have to match the `vulkan` section, as this SDK is r
 to generate Metal source from Vulkan SPIR-V.
 
 
+## spirv-headers
+
+- Upstream: https://github.com/KhronosGroup/SPIRV-Headers
+- Version: vulkan-sdk-1.4.328.1 (01e0577914a75a2569c846778c2f93aa8e6feddd, 2025)
+
+Files extracted from upstream source:
+- `include/spirv/unified1` folder with only `spirv.h` and `spirv.hpp`
+- `LICENSE`
+
+
 ## spirv-reflect
 
 - Upstream: https://github.com/KhronosGroup/SPIRV-Reflect
@@ -1029,7 +1055,7 @@ Patches:
 
 - `0001-specialization-constants.patch` (GH-50325)
 - `0002-zero-size-for-sc-sized-arrays.patch` (GH-94985)
-
+- `0003-spirv-headers.patch` (GH-111452)
 
 ## swappy-frame-pacing
 
@@ -1059,6 +1085,7 @@ Patches:
 
 - `0001-revert-tvglines-bezier-precision.patch` (GH-96658)
 - `0002-use-heap-alloc.patch` (GH-109530)
+- `0003-explicit-includes.patch` (GH-111557)
 
 
 ## tinyexr

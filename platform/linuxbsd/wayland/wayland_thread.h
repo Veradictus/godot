@@ -45,6 +45,7 @@
 #ifdef GLES3_ENABLED
 #include <wayland-egl-core.h>
 #endif
+#include <xkbcommon/xkbcommon-compose.h>
 #include <xkbcommon/xkbcommon.h>
 #endif // SOWRAP_ENABLED
 
@@ -1035,6 +1036,8 @@ private:
 	static void _seat_state_set_current(WaylandThread::SeatState &p_ss);
 	static Ref<InputEventKey> _seat_state_get_key_event(SeatState *p_ss, xkb_keycode_t p_keycode, bool p_pressed);
 	static Ref<InputEventKey> _seat_state_get_unstuck_key_event(SeatState *p_ss, xkb_keycode_t p_keycode, bool p_pressed, Key p_key);
+
+	static void _seat_state_handle_xkb_keycode(SeatState *p_ss, xkb_keycode_t p_xkb_keycode, bool p_pressed, bool p_echo = false);
 
 	static void _wayland_state_update_cursor();
 

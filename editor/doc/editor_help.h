@@ -344,6 +344,7 @@ class EditorHelpBit : public VBoxContainer {
 	void _add_type_to_title(const DocType &p_doc_type);
 	void _update_labels();
 	void _go_to_help(const String &p_what);
+	void _go_to_url(const String &p_what);
 	void _meta_clicked(const String &p_select);
 
 protected:
@@ -380,7 +381,8 @@ protected:
 	void _notification(int p_what);
 
 public:
-	static Control *show_tooltip(Control *p_target, const String &p_symbol, const String &p_prologue = String(), bool p_use_class_prefix = false);
+	// The returned control is an orphan node, which is to make the standard tooltip invisible.
+	[[nodiscard]] static Control *make_tooltip(Control *p_target, const String &p_symbol, const String &p_prologue = String(), bool p_use_class_prefix = false);
 
 	void popup_under_cursor();
 

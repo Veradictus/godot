@@ -541,7 +541,7 @@
 			<param index="0" name="index" type="int" />
 			<param index="1" name="language" type="String" />
 			<description>
-				Sets language code of item's text used for line-breaking and text shaping algorithms, if left empty current locale is used instead.
+				Sets the language code of the text for the item at the given index to [param language]. This is used for line-breaking and text shaping algorithms. If [param language] is empty, the current locale is used.
 			</description>
 		</method>
 		<method name="set_item_metadata">
@@ -680,14 +680,14 @@
 		<signal name="id_pressed">
 			<param index="0" name="id" type="int" />
 			<description>
-				Emitted when an item of some [param id] is pressed or its accelerator is activated.
+				Emitted when an item of some [param id] is pressed. Also emitted when its accelerator is activated on macOS.
 				[b]Note:[/b] If [param id] is negative (either explicitly or due to overflow), this will return the corresponding index instead.
 			</description>
 		</signal>
 		<signal name="index_pressed">
 			<param index="0" name="index" type="int" />
 			<description>
-				Emitted when an item of some [param index] is pressed or its accelerator is activated.
+				Emitted when an item of some [param index] is pressed. Also emitted when its accelerator is activated on macOS.
 			</description>
 		</signal>
 		<signal name="menu_changed">

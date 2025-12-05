@@ -478,9 +478,9 @@ RID RendererCanvasRenderRD::_get_pipeline_specialization_or_ubershader(CanvasSha
 			RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
 			uint64_t input_mask = p_shader_data->get_vertex_input_mask(r_pipeline_key.variant, r_pipeline_key.ubershader);
 			if (p_mesh_instance.is_valid()) {
-				mesh_storage->mesh_instance_surface_get_vertex_arrays_and_format(p_mesh_instance, p_surface_index, input_mask, false, *r_vertex_array, r_pipeline_key.vertex_format_id);
+				mesh_storage->mesh_instance_surface_get_vertex_arrays_and_format(p_mesh_instance, p_surface_index, input_mask, false, false, *r_vertex_array, r_pipeline_key.vertex_format_id);
 			} else {
-				mesh_storage->mesh_surface_get_vertex_arrays_and_format(p_surface, input_mask, false, *r_vertex_array, r_pipeline_key.vertex_format_id);
+				mesh_storage->mesh_surface_get_vertex_arrays_and_format(p_surface, input_mask, false, false, *r_vertex_array, r_pipeline_key.vertex_format_id);
 			}
 		}
 
@@ -2276,6 +2276,9 @@ void RendererCanvasRenderRD::_render_batch_items(RenderTarget p_to_render_target
 		if (texture_storage->render_target_is_clear_requested(p_to_render_target.render_target)) {
 			clear = true;
 			clear_color = texture_storage->render_target_get_clear_request_color(p_to_render_target.render_target);
+			if (texture_storage->render_target_is_using_hdr(p_to_render_target.render_target)) {
+				clear_color = clear_color.srgb_to_linear();
+			}
 			texture_storage->render_target_disable_clear_request(p_to_render_target.render_target);
 		}
 		// TODO: Obtain from framebuffer format eventually when this is implemented.
