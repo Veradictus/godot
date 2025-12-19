@@ -673,12 +673,12 @@ Transform3D Node3DEditorViewport::to_camera_transform(const Cursor &p_cursor) co
 }
 
 int Node3DEditorViewport::get_selected_count() const {
-	const HashMap<Node *, Object *> &selection = editor_selection->get_selection();
+	const HashMap<ObjectID, Object *> &selection = editor_selection->get_selection();
 
 	int count = 0;
 
-	for (const KeyValue<Node *, Object *> &E : selection) {
-		Node3D *sp = Object::cast_to<Node3D>(E.key);
+	for (const KeyValue<ObjectID, Object *> &E : selection) {
+		Node3D *sp = ObjectDB::get_instance<Node3D>(E.key);
 		if (!sp) {
 			continue;
 		}
@@ -1810,8 +1810,18 @@ void Node3DEditorViewport::input(const Ref<InputEvent> &p_event) {
 }
 
 void Node3DEditorViewport::_sinput(const Ref<InputEvent> &p_event) {
+	const Ref<InputEventKey> k = p_event;
+
+	if (k.is_valid() && k->is_pressed() && EDITOR_GET("editors/3d/navigation/emulate_numpad")) {
+		const Key code = k->get_physical_keycode();
+		if (code >= Key::KEY_0 && code <= Key::KEY_9) {
+			k->set_keycode(code - Key::KEY_0 + Key::KP_0);
+		}
+	}
+
 	if (previewing || get_viewport()->gui_get_drag_data()) {
-		return; //do NONE
+		// Disable all input actions when previewing a camera or during drag-and-drop.
+		return;
 	}
 
 	if (_redirect_freelook_input(p_event, this)) {
@@ -2463,8 +2473,6 @@ void Node3DEditorViewport::_sinput(const Ref<InputEvent> &p_event) {
 			}
 		}
 	}
-
-	Ref<InputEventKey> k = p_event;
 
 	if (k.is_valid()) {
 		if (!k->is_pressed()) {
@@ -3341,13 +3349,13 @@ void Node3DEditorViewport::_notification(int p_what) {
 				_update_camera(delta);
 			}
 
-			const HashMap<Node *, Object *> &selection = editor_selection->get_selection();
+			const HashMap<ObjectID, Object *> &selection = editor_selection->get_selection();
 
 			bool changed = false;
 			bool exist = false;
 
-			for (const KeyValue<Node *, Object *> &E : selection) {
-				Node3D *sp = Object::cast_to<Node3D>(E.key);
+			for (const KeyValue<ObjectID, Object *> &E : selection) {
+				Node3D *sp = ObjectDB::get_instance<Node3D>(E.key);
 				if (!sp) {
 					continue;
 				}
@@ -8489,10 +8497,10 @@ void Node3DEditor::update_grid() {
 void Node3DEditor::_selection_changed() {
 	_refresh_menu_icons();
 
-	const HashMap<Node *, Object *> &selection = editor_selection->get_selection();
+	const HashMap<ObjectID, Object *> &selection = editor_selection->get_selection();
 
-	for (const KeyValue<Node *, Object *> &E : selection) {
-		Node3D *sp = Object::cast_to<Node3D>(E.key);
+	for (const KeyValue<ObjectID, Object *> &E : selection) {
+		Node3D *sp = ObjectDB::get_instance<Node3D>(E.key);
 		if (!sp) {
 			continue;
 		}
