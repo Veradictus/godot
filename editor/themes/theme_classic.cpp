@@ -717,6 +717,25 @@ void ThemeClassic::populate_standard_styles(const Ref<EditorTheme> &p_theme, Edi
 			p_theme->set_stylebox("title_button_pressed", "Tree", style_tree_title);
 		}
 
+		// ProjectList.
+		{
+			Ref<StyleBoxFlat> style_project_list_hover = p_config.base_style->duplicate();
+			style_project_list_hover->set_bg_color(p_config.highlight_color * Color(1, 1, 1, 0.4));
+			style_project_list_hover->set_border_width_all(0);
+
+			Ref<StyleBoxFlat> style_project_list_hover_pressed = p_config.base_style->duplicate();
+			style_project_list_hover_pressed->set_bg_color(p_config.highlight_color * Color(1, 1, 1, 1.2));
+			style_project_list_hover_pressed->set_border_width_all(0);
+
+			p_theme->set_stylebox("hovered", "ProjectList", style_project_list_hover);
+			p_theme->set_stylebox("hover_pressed", "ProjectList", style_project_list_hover_pressed);
+			p_theme->set_stylebox("selected", "ProjectList", style_tree_selected);
+			p_theme->set_stylebox("focus", "ProjectList", p_config.button_style_focus);
+
+			p_theme->set_color(SceneStringName(font_color), "ProjectList", p_config.font_color);
+			p_theme->set_color("guide_color", "ProjectList", guide_color);
+		}
+
 		// ItemList.
 		{
 			Ref<StyleBoxFlat> style_itemlist_bg = p_config.base_style->duplicate();
@@ -1411,6 +1430,8 @@ void ThemeClassic::populate_standard_styles(const Ref<EditorTheme> &p_theme, Edi
 			p_theme->set_stylebox("slot", "GraphNode", gn_slot_style);
 			p_theme->set_stylebox("slot_selected", "GraphNode", p_config.button_style_focus);
 
+			p_theme->set_stylebox("separator", "GraphNode", p_theme->get_stylebox("separator", "HSeparator"));
+
 			p_theme->set_color("resizer_color", "GraphNode", gn_decoration_color);
 
 			p_theme->set_constant("port_h_offset", "GraphNode", 1);
@@ -1990,6 +2011,26 @@ void ThemeClassic::populate_editor_styles(const Ref<EditorTheme> &p_theme, Edito
 			p_theme->set_stylebox(SceneStringName(panel), "TabContainerOdd", style_content_panel_odd);
 		}
 
+		// PanelContainerTabbarInner.
+		{
+			// Used by Modern theme.
+			p_theme->set_type_variation("PanelContainerTabbarInner", "PanelContainer");
+			p_theme->set_stylebox(SceneStringName(panel), "PanelContainerTabbarInner", EditorThemeManager::make_empty_stylebox(0, 0, 0, 0));
+		}
+
+		// TreeLineEdit.
+		{
+			Ref<StyleBoxFlat> tree_line_edit_style = p_theme->get_stylebox(CoreStringName(normal), SNAME("LineEdit"))->duplicate();
+			tree_line_edit_style->set_corner_radius_all(0);
+
+			Ref<StyleBoxFlat> tree_line_edit_style_focus = p_theme->get_stylebox("focus", SNAME("LineEdit"))->duplicate();
+			tree_line_edit_style_focus->set_corner_radius_all(0);
+
+			p_theme->set_type_variation("TreeLineEdit", "LineEdit");
+			p_theme->set_stylebox(CoreStringName(normal), "TreeLineEdit", tree_line_edit_style);
+			p_theme->set_stylebox("focus", "TreeLineEdit", tree_line_edit_style_focus);
+		}
+
 		// EditorValidationPanel.
 		p_theme->set_stylebox(SceneStringName(panel), "EditorValidationPanel", p_config.tree_panel_style);
 
@@ -2013,6 +2054,10 @@ void ThemeClassic::populate_editor_styles(const Ref<EditorTheme> &p_theme, Edito
 		// Vertical separation between inspector areas.
 		p_theme->set_type_variation("EditorInspectorContainer", "VBoxContainer");
 		p_theme->set_constant("separation", "EditorInspectorContainer", 0);
+
+		// Vertical separation between inspector sections.
+		p_theme->set_type_variation("EditorSectionContainer", "VBoxContainer");
+		p_theme->set_constant("separation", "EditorSectionContainer", 0);
 
 		// Vertical separation between inspector properties.
 		p_theme->set_type_variation("EditorPropertyContainer", "VBoxContainer");
@@ -2090,6 +2135,9 @@ void ThemeClassic::populate_editor_styles(const Ref<EditorTheme> &p_theme, Edito
 		category_bg->set_border_color(prop_category_color);
 		category_bg->set_content_margin_all(0);
 		p_theme->set_stylebox("bg", "EditorInspectorCategory", category_bg);
+
+		// EditorInspectorArray.
+		p_theme->set_color("bg", "EditorInspectorArray", p_config.dark_color_1);
 
 		p_theme->set_constant("inspector_margin", EditorStringName(Editor), 12 * EDSCALE);
 
