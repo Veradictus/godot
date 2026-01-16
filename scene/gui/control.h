@@ -241,6 +241,7 @@ private:
 
 		bool clip_contents = false;
 		bool disable_visibility_clip = false;
+		bool override_snap_controls_to_pixels = false;
 
 		CursorShape default_cursor = CURSOR_ARROW;
 
@@ -656,6 +657,9 @@ public:
 
 	void set_disable_visibility_clip(bool p_ignore);
 	bool is_visibility_clip_disabled() const;
+
+	void set_override_snap_controls_to_pixels(bool p_override);
+	bool is_override_snap_controls_to_pixels() const;
 
 	// Theming.
 

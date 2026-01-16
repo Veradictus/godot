@@ -721,7 +721,7 @@ void Control::_update_canvas_item_transform() {
 	xform[2] += get_position();
 
 	// We use a little workaround to avoid flickering when moving the pivot with _edit_set_pivot()
-	if (is_inside_tree() && Math::abs(Math::sin(data.rotation * 4.0f)) < 0.00001f && get_viewport()->is_snap_controls_to_pixels_enabled()) {
+	if (is_inside_tree() && Math::abs(Math::sin(data.rotation * 4.0f)) < 0.00001f && get_viewport()->is_snap_controls_to_pixels_enabled() && !data.override_snap_controls_to_pixels) {
 		xform[2] = (xform[2] + Vector2(0.5, 0.5)).floor();
 	}
 
@@ -2908,6 +2908,20 @@ bool Control::is_visibility_clip_disabled() const {
 	return data.disable_visibility_clip;
 }
 
+void Control::set_override_snap_controls_to_pixels(bool p_override) {
+	ERR_MAIN_THREAD_GUARD;
+	if (data.override_snap_controls_to_pixels == p_override) {
+		return;
+	}
+	data.override_snap_controls_to_pixels = p_override;
+	_size_changed();
+}
+
+bool Control::is_override_snap_controls_to_pixels() const {
+	ERR_READ_THREAD_GUARD_V(false);
+	return data.override_snap_controls_to_pixels;
+}
+
 void Control::set_clip_contents(bool p_clip) {
 	ERR_MAIN_THREAD_GUARD;
 	if (data.clip_contents == p_clip) {
@@ -4170,6 +4184,9 @@ void Control::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_clip_contents", "enable"), &Control::set_clip_contents);
 	ClassDB::bind_method(D_METHOD("is_clipping_contents"), &Control::is_clipping_contents);
 
+	ClassDB::bind_method(D_METHOD("set_override_snap_controls_to_pixels", "enable"), &Control::set_override_snap_controls_to_pixels);
+	ClassDB::bind_method(D_METHOD("is_override_snap_controls_to_pixels"), &Control::is_override_snap_controls_to_pixels);
+
 	ClassDB::bind_method(D_METHOD("grab_click_focus"), &Control::grab_click_focus);
 
 	ClassDB::bind_method(D_METHOD("set_drag_forwarding", "drag_func", "can_drop_func", "drop_func"), &Control::set_drag_forwarding);
@@ -4197,6 +4214,7 @@ void Control::_bind_methods() {
 
 	ADD_GROUP("Layout", "");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "clip_contents"), "set_clip_contents", "is_clipping_contents");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "override_snap_controls_to_pixels"), "set_override_snap_controls_to_pixels", "is_override_snap_controls_to_pixels");
 	ADD_PROPERTY(PropertyInfo(Variant::VECTOR2, "custom_minimum_size", PROPERTY_HINT_NONE, "suffix:px"), "set_custom_minimum_size", "get_custom_minimum_size");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "layout_direction", PROPERTY_HINT_ENUM, "Inherited,Based on Application Locale,Left-to-Right,Right-to-Left,Based on System Locale"), "set_layout_direction", "get_layout_direction");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "layout_mode", PROPERTY_HINT_ENUM, "Position,Anchors,Container,Uncontrolled", PROPERTY_USAGE_DEFAULT | PROPERTY_USAGE_INTERNAL), "_set_layout_mode", "_get_layout_mode");
