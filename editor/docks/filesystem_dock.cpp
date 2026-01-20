@@ -409,6 +409,8 @@ void FileSystemDock::_update_tree(const Vector<String> &p_uncollapsed_paths, boo
 	}
 	if (fav_changed) {
 		EditorSettings::get_singleton()->set_favorites(favorite_paths);
+		// Setting favorites causes the tree to update, so continuing is redundant.
+		return;
 	}
 
 	Ref<Texture2D> folder_icon = get_editor_theme_icon(SNAME("Folder"));
@@ -2281,7 +2283,9 @@ void FileSystemDock::_file_option(int p_option, const Vector<String> &p_selected
 				// Default to PowerShell as done by Windows 10 and later.
 				terminal_emulators.push_back("powershell");
 #elif defined(MACOS_ENABLED)
-				terminal_emulators.push_back("/System/Applications/Utilities/Terminal.app");
+				// NOTE: To avoid duplicating the Terminal icon on the Dock, we will use the `open` command
+				// rather than directly launching the Terminal.app bundle.
+				terminal_emulators.push_back("open");
 #elif defined(LINUXBSD_ENABLED)
 				// Try terminal emulators that ship with common Linux distributions first.
 				terminal_emulators.push_back("gnome-terminal");
@@ -2355,6 +2359,13 @@ void FileSystemDock::_file_option(int p_option, const Vector<String> &p_selected
 					terminal_emulator_args.push_back("cd '{directory}' && exec $SHELL");
 					append_default_args = false;
 				}
+			}
+#endif
+
+#ifdef MACOS_ENABLED
+			if (terminal_emulator_setting.is_empty()) {
+				terminal_emulator_args.push_back("-b");
+				terminal_emulator_args.push_back("com.apple.terminal");
 			}
 #endif
 
@@ -2470,7 +2481,6 @@ void FileSystemDock::_file_option(int p_option, const Vector<String> &p_selected
 				}
 			}
 			EditorSettings::get_singleton()->set_favorites(favorites_list);
-			_update_tree(get_uncollapsed_paths());
 		} break;
 
 		case FILE_MENU_REMOVE_FAVORITE: {
@@ -2480,10 +2490,6 @@ void FileSystemDock::_file_option(int p_option, const Vector<String> &p_selected
 				favorites_list.erase(p_selected[i]);
 			}
 			EditorSettings::get_singleton()->set_favorites(favorites_list);
-			_update_tree(get_uncollapsed_paths());
-			if (current_path == "Favorites") {
-				_update_file_list(true);
-			}
 		} break;
 
 		case FILE_MENU_SHOW_IN_FILESYSTEM: {
@@ -4544,6 +4550,7 @@ FileSystemDock::FileSystemDock() {
 	file_list_display_mode = FILE_LIST_DISPLAY_THUMBNAILS;
 
 	ProjectSettings::get_singleton()->connect("settings_changed", callable_mp(this, &FileSystemDock::_project_settings_changed));
+	EditorSettings::get_singleton()->connect("_favorites_changed", callable_mp(this, &FileSystemDock::update_all));
 	main_scene_path = ResourceUID::ensure_path(GLOBAL_GET("application/run/main_scene"));
 
 	add_resource_tooltip_plugin(memnew(EditorTextureTooltipPlugin));
