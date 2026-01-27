@@ -30,6 +30,8 @@
 
 #include "container.h"
 
+#include "core/config/engine.h"
+
 void Container::_child_minsize_changed() {
 	update_minimum_size();
 	queue_sort();
@@ -81,6 +83,31 @@ void Container::remove_child_notify(Node *p_child) {
 void Container::_sort_children() {
 	if (!is_inside_tree()) {
 		pending_sort = false;
+		return;
+	}
+
+	// Cycle detection: prevent infinite sort loops by tracking sorts per frame.
+	uint64_t current_frame = Engine::get_singleton()->get_process_frames();
+	if (current_frame != last_sort_frame) {
+		// New frame, reset counter.
+		last_sort_frame = current_frame;
+		sorts_this_frame = 0;
+	}
+
+	sorts_this_frame++;
+	if (sorts_this_frame > MAX_SORTS_PER_FRAME) {
+		pending_sort = false;
+		ERR_PRINT_ONCE(vformat(
+			"Infinite loop detected in Container sort for node '%s'. "
+			"Sorted %d times in a single frame, which indicates a circular dependency. "
+			"This typically happens when a child's minimum size depends on its current size "
+			"(e.g., TextureRect with EXPAND_FIT_WIDTH/HEIGHT modes inside a container). "
+			"Each resize triggers a minimum size change, which triggers another sort, creating an infinite cycle. "
+			"The sort has been stopped to prevent a crash. "
+			"Check for TextureRect nodes with size-dependent expand modes, or custom Controls "
+			"whose get_minimum_size() depends on get_size().",
+			get_path(), sorts_this_frame
+		));
 		return;
 	}
 

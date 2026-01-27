@@ -39,6 +39,11 @@ class Container : public Control {
 	void _sort_children();
 	void _child_minsize_changed();
 
+	// Cycle detection to prevent infinite sort loops.
+	uint64_t last_sort_frame = 0;
+	uint32_t sorts_this_frame = 0;
+	static constexpr uint32_t MAX_SORTS_PER_FRAME = 16;
+
 protected:
 	enum class SortableVisibilityMode {
 		VISIBLE,

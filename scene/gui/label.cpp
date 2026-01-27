@@ -971,10 +971,15 @@ Rect2 Label::get_character_bounds(int p_pos) const {
 }
 
 Size2 Label::get_minimum_size() const {
+	// For autowrap, we need to be careful: _ensure_shaped() uses get_size() which can
+	// create a feedback loop. However, we still need to calculate the wrapped height.
+	// The Container cycle detection will catch any infinite loops, and using the current
+	// size for shaping is fine as long as we have reasonable constraints.
+	// The key: return width=1 so we don't affect the container's width calculation.
+
 	_ensure_shaped();
 
 	Size2 min_size = minsize;
-
 	const Ref<Font> &font = (settings.is_valid() && settings->get_font().is_valid()) ? settings->get_font() : theme_cache.font;
 	int font_size = settings.is_valid() ? settings->get_font_size() : theme_cache.font_size;
 
@@ -988,6 +993,7 @@ Size2 Label::get_minimum_size() const {
 		} else if (clip || overrun_behavior != TextServer::OVERRUN_NO_TRIMMING) {
 			min_size.height = 1;
 		}
+		// Return width=1 so containers determine width, but use actual wrapped height
 		return Size2(1, min_size.height) + min_style;
 	} else {
 		if (clip || overrun_behavior != TextServer::OVERRUN_NO_TRIMMING) {

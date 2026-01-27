@@ -3493,7 +3493,13 @@ Size2 TextEdit::get_minimum_size() const {
 	if (fit_content_height) {
 		ms.height += content_size_cache.height;
 	}
-	if (fit_content_width) {
+	// When line wrapping is enabled with fit_content_width, the content width is based
+	// on the current wrapped width (which wraps to get_size().width), creating a circular
+	// dependency: resize → text rewraps → minimum size changes → container resorts → resize.
+	// To prevent this, we don't add content width when wrapping is enabled.
+	// This combination is unusual anyway (wrapping adapts text to width, while fit_content
+	// adapts width to text - they're contradictory goals).
+	if (fit_content_width && line_wrapping_mode == LineWrappingMode::LINE_WRAPPING_NONE) {
 		ms.width += content_size_cache.width;
 	}
 	return ms;

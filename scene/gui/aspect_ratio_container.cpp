@@ -107,10 +107,17 @@ void AspectRatioContainer::_notification(int p_what) {
 				}
 
 				// Temporary fix for editor crash.
+				// TextureRect expand modes that depend on current size create circular dependencies:
+				// TextureRect resize -> update_minimum_size() -> container min size changes ->
+				// container resort -> TextureRect resize (infinite loop)
 				TextureRect *trect = Object::cast_to<TextureRect>(c);
 				if (trect) {
-					if (trect->get_expand_mode() == TextureRect::EXPAND_FIT_WIDTH_PROPORTIONAL || trect->get_expand_mode() == TextureRect::EXPAND_FIT_HEIGHT_PROPORTIONAL) {
-						WARN_PRINT_ONCE("Proportional TextureRect is currently not supported inside AspectRatioContainer");
+					TextureRect::ExpandMode mode = trect->get_expand_mode();
+				if (mode == TextureRect::EXPAND_FIT_WIDTH ||
+						mode == TextureRect::EXPAND_FIT_HEIGHT ||
+						mode == TextureRect::EXPAND_FIT_WIDTH_PROPORTIONAL ||
+						mode == TextureRect::EXPAND_FIT_HEIGHT_PROPORTIONAL) {
+						WARN_PRINT_ONCE("Size-dependent TextureRect expand modes (Fit Width, Fit Height, and proportional variants) are not supported inside AspectRatioContainer to prevent infinite layout loops.");
 						continue;
 					}
 				}

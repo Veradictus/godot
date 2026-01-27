@@ -8020,10 +8020,14 @@ Size2 RichTextLabel::get_minimum_size() const {
 	Size2 min_size;
 
 	if (fit_content) {
+		// When fit_content + autowrap are both enabled, content wraps to current width.
+		// This can create feedback loops, but the Container cycle detection will catch them.
+		// We still want to report the correct wrapped height for proper layout.
 		min_size.x = get_content_width();
 		min_size.y = get_content_height();
 	}
 
+	// With autowrap, return width=1 so container determines width, but use actual content height
 	return sb_min_size +
 			((autowrap_mode != TextServer::AUTOWRAP_OFF) ? Size2(1, min_size.height) : min_size);
 }

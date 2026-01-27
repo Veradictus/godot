@@ -99,7 +99,17 @@ void TextureRect::_notification(int p_what) {
 			}
 		} break;
 		case NOTIFICATION_RESIZED: {
-			update_minimum_size();
+			// Don't update minimum size for expand modes that depend on current size.
+			// These modes create circular dependencies: resize → update_minimum_size() →
+			// container resort → resize (infinite loop).
+			// These modes don't have meaningful minimum sizes anyway since they depend
+			// on the current size, which is a layout constraint, not an intrinsic minimum.
+			if (expand_mode != EXPAND_FIT_WIDTH &&
+					expand_mode != EXPAND_FIT_HEIGHT &&
+					expand_mode != EXPAND_FIT_WIDTH_PROPORTIONAL &&
+					expand_mode != EXPAND_FIT_HEIGHT_PROPORTIONAL) {
+				update_minimum_size();
+			}
 		} break;
 	}
 }
@@ -113,19 +123,15 @@ Size2 TextureRect::get_minimum_size() const {
 			case EXPAND_IGNORE_SIZE: {
 				return Size2();
 			} break;
-			case EXPAND_FIT_WIDTH: {
-				return Size2(get_size().y, 0);
-			} break;
-			case EXPAND_FIT_WIDTH_PROPORTIONAL: {
-				real_t ratio = real_t(texture->get_width()) / texture->get_height();
-				return Size2(get_size().y * ratio, 0);
-			} break;
-			case EXPAND_FIT_HEIGHT: {
-				return Size2(0, get_size().x);
-			} break;
+			case EXPAND_FIT_WIDTH:
+			case EXPAND_FIT_WIDTH_PROPORTIONAL:
+			case EXPAND_FIT_HEIGHT:
 			case EXPAND_FIT_HEIGHT_PROPORTIONAL: {
-				real_t ratio = real_t(texture->get_height()) / texture->get_width();
-				return Size2(0, get_size().x * ratio);
+				// These modes are layout constraints that depend on current size,
+				// not intrinsic minimum sizes. Returning Size2(0, 0) prevents
+				// circular dependencies while allowing the container to size freely.
+				// The actual sizing behavior is handled by the stretch_mode during drawing.
+				return Size2();
 			} break;
 		}
 	}
