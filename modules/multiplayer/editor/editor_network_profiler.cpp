@@ -30,7 +30,6 @@
 
 #include "editor_network_profiler.h"
 
-#include "core/io/resource_loader.h"
 #include "editor/editor_string_names.h"
 #include "editor/run/editor_run_bar.h"
 #include "editor/settings/editor_settings.h"
