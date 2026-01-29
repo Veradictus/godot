@@ -30,7 +30,6 @@
 
 #pragma once
 
-#include "core/input/input_event.h"
 #include "servers/display/display_server.h"
 
 #if defined(RD_ENABLED)

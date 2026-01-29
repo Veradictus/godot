@@ -31,7 +31,6 @@
 #pragma once
 
 #include "scene/3d/skeleton_modifier_3d.h"
-#include "scene/resources/curve.h"
 
 class BoneTwistDisperser3D : public SkeletonModifier3D {
 	GDCLASS(BoneTwistDisperser3D, SkeletonModifier3D);

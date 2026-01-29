@@ -313,11 +313,6 @@ struct hb_vector_t
     assert (allocated < 0);
     allocated = -(allocated + 1);
   }
-  void ensure_error ()
-  {
-    if (!in_error ())
-      set_error ();
-  }
 
   Type *
   _realloc (unsigned new_allocated)
@@ -570,7 +565,7 @@ struct hb_vector_t
 
   template <typename allocator_t>
   HB_ALWAYS_INLINE_VECTOR_ALLOCS
-  bool duplicate_vector_from_pool (allocator_t *allocator, const hb_vector_t &other)
+  bool allocate_from_pool (allocator_t *allocator, const hb_vector_t &other)
   {
     if (unlikely (!allocate_from_pool (allocator, other.length, false)))
       return false;

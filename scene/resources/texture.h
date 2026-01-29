@@ -33,6 +33,7 @@
 #include "core/io/image.h"
 #include "core/io/resource.h"
 #include "core/variant/typed_array.h"
+#include "scene/resources/curve.h"
 
 class Texture : public Resource {
 	GDCLASS(Texture, Resource);

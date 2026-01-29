@@ -69,6 +69,7 @@ private:
 	String exporter;
 	HashSet<String> selected_files;
 	HashMap<String, FileExportMode> customized_files;
+	bool runnable = false;
 	bool dedicated_server = false;
 
 	Vector<String> patches;

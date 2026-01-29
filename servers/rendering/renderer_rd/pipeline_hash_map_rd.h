@@ -30,7 +30,6 @@
 
 #pragma once
 
-#include "core/templates/rb_set.h"
 #include "servers/rendering/rendering_device.h"
 #include "servers/rendering/rendering_server.h"
 

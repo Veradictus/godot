@@ -58,8 +58,7 @@
 #endif
 
 #include "core/config/project_settings.h"
-#include "core/input/input_event.h"
-#include "core/templates/rb_map.h"
+#include "core/input/input.h"
 #include "servers/display/display_server.h"
 
 #include <climits>

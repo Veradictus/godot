@@ -31,7 +31,6 @@
 #include "project_list.h"
 
 #include "core/config/project_settings.h"
-#include "core/input/input.h"
 #include "core/io/dir_access.h"
 #include "core/os/time.h"
 #include "core/version.h"

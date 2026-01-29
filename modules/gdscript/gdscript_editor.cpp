@@ -246,6 +246,10 @@ int GDScriptLanguage::find_function(const String &p_function, const String &p_co
 	return -1;
 }
 
+Script *GDScriptLanguage::create_script() const {
+	return memnew(GDScript);
+}
+
 /* DEBUGGER FUNCTIONS */
 
 thread_local int GDScriptLanguage::_debug_parse_err_line = -1;

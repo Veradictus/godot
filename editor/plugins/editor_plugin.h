@@ -31,6 +31,7 @@
 #pragma once
 
 #include "core/io/config_file.h"
+#include "editor/docks/dock_constants.h"
 #include "editor/inspector/editor_context_menu_plugin.h"
 #include "scene/3d/camera_3d.h"
 #include "scene/gui/control.h"
@@ -87,21 +88,19 @@ public:
 		CONTAINER_PROJECT_SETTING_TAB_RIGHT,
 	};
 
-#ifndef DISABLE_DEPRECATED
 	enum DockSlot {
-		DOCK_SLOT_NONE = -1,
-		DOCK_SLOT_LEFT_UL,
-		DOCK_SLOT_LEFT_BL,
-		DOCK_SLOT_LEFT_UR,
-		DOCK_SLOT_LEFT_BR,
-		DOCK_SLOT_RIGHT_UL,
-		DOCK_SLOT_RIGHT_BL,
-		DOCK_SLOT_RIGHT_UR,
-		DOCK_SLOT_RIGHT_BR,
-		DOCK_SLOT_BOTTOM,
-		DOCK_SLOT_MAX
+		DOCK_SLOT_NONE = DockConstants::DOCK_SLOT_NONE,
+		DOCK_SLOT_LEFT_UL = DockConstants::DOCK_SLOT_LEFT_UL,
+		DOCK_SLOT_LEFT_BL = DockConstants::DOCK_SLOT_LEFT_BL,
+		DOCK_SLOT_LEFT_UR = DockConstants::DOCK_SLOT_LEFT_UR,
+		DOCK_SLOT_LEFT_BR = DockConstants::DOCK_SLOT_LEFT_BR,
+		DOCK_SLOT_RIGHT_UL = DockConstants::DOCK_SLOT_RIGHT_UL,
+		DOCK_SLOT_RIGHT_BL = DockConstants::DOCK_SLOT_RIGHT_BL,
+		DOCK_SLOT_RIGHT_UR = DockConstants::DOCK_SLOT_RIGHT_UR,
+		DOCK_SLOT_RIGHT_BR = DockConstants::DOCK_SLOT_RIGHT_BR,
+		DOCK_SLOT_BOTTOM = DockConstants::DOCK_SLOT_BOTTOM,
+		DOCK_SLOT_MAX = DockConstants::DOCK_SLOT_MAX
 	};
-#endif
 
 	enum AfterGUIInput {
 		AFTER_GUI_INPUT_PASS,
@@ -269,10 +268,8 @@ public:
 	void disable_plugin();
 };
 
-#ifndef DISABLE_DEPRECATED
-VARIANT_ENUM_CAST(EditorPlugin::DockSlot);
-#endif
 VARIANT_ENUM_CAST(EditorPlugin::CustomControlContainer);
+VARIANT_ENUM_CAST(EditorPlugin::DockSlot);
 VARIANT_ENUM_CAST(EditorPlugin::AfterGUIInput);
 
 typedef EditorPlugin *(*EditorPluginCreateFunc)();

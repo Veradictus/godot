@@ -169,6 +169,11 @@ struct hb_atomic_t
 
   int operator++ (int) { return inc (); }
   int operator-- (int) { return dec (); }
+  long operator|= (long v_)
+  {
+    set_relaxed (get_relaxed () | v_);
+    return *this;
+  }
 
   friend void swap (hb_atomic_t &a, hb_atomic_t &b) noexcept
   {
@@ -231,6 +236,7 @@ struct hb_atomic_t
 
   int operator ++ (int) { return inc (); }
   int operator -- (int) { return dec (); }
+  long operator |= (long v_) { set_relaxed (get_relaxed () | v_); return *this; }
 
   T v = 0;
 };

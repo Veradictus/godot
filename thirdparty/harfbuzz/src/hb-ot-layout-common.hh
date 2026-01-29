@@ -828,9 +828,46 @@ struct Feature
 		 const Record_sanitize_closure_t *closure = nullptr) const
   {
     TRACE_SANITIZE (this);
-    return_trace (c->check_struct (this) &&
-		  featureParams.sanitize (c, this, closure ? closure->tag : HB_TAG_NONE) &&
-		  lookupIndex.sanitize (c));
+    if (unlikely (!(c->check_struct (this) && lookupIndex.sanitize (c))))
+      return_trace (false);
+    hb_barrier ();
+
+    /* Some earlier versions of Adobe tools calculated the offset of the
+     * FeatureParams subtable from the beginning of the FeatureList table!
+     *
+     * If sanitizing "failed" for the FeatureParams subtable, try it with the
+     * alternative location.  We would know sanitize "failed" if old value
+     * of the offset was non-zero, but it's zeroed now.
+     *
+     * Only do this for the 'size' feature, since at the time of the faulty
+     * Adobe tools, only the 'size' feature had FeatureParams defined.
+     */
+
+    if (likely (featureParams.is_null ()))
+      return_trace (true);
+
+    unsigned int orig_offset = featureParams;
+    if (unlikely (!featureParams.sanitize (c, this, closure ? closure->tag : HB_TAG_NONE)))
+      return_trace (false);
+    hb_barrier ();
+
+    if (featureParams == 0 && closure &&
+	closure->tag == HB_TAG ('s','i','z','e') &&
+	closure->list_base && closure->list_base < this)
+    {
+      unsigned int new_offset_int = orig_offset -
+				    (((char *) this) - ((char *) closure->list_base));
+
+      Offset16To<FeatureParams> new_offset;
+      /* Check that it would not overflow. */
+      new_offset = new_offset_int;
+      if (new_offset == new_offset_int &&
+	  c->try_set (&featureParams, new_offset_int) &&
+	  !featureParams.sanitize (c, this, closure ? closure->tag : HB_TAG_NONE))
+	return_trace (false);
+    }
+
+    return_trace (true);
   }
 
   Offset16To<FeatureParams>
@@ -1396,7 +1433,7 @@ struct Lookup
     if (unlikely (!get_subtables<TSubTable> ().sanitize (c, this, get_type ())))
       return_trace (false);
 
-    if (unlikely (get_type () == TSubTable::Extension))
+    if (unlikely (get_type () == TSubTable::Extension && !c->get_edit_count ()))
     {
       hb_barrier ();
 
@@ -1404,6 +1441,11 @@ struct Lookup
        * have the same type, which shall not be the Extension type
        * itself (but we already checked for that).
        * This is specially important if one has a reverse type!
+       *
+       * We only do this if sanitizer edit_count is zero.  Otherwise,
+       * some of the subtables might have become insane after they
+       * were sanity-checked by the edits of subsequent subtables.
+       * https://bugs.chromium.org/p/chromium/issues/detail?id=960331
        */
       unsigned int type = get_subtable<TSubTable> (0).u.extension.get_type ();
       for (unsigned int i = 1; i < subtables; i++)
@@ -2033,7 +2075,7 @@ struct ClassDef
   unsigned int get (hb_codepoint_t k) const { return get_class (k); }
   unsigned int get_class (hb_codepoint_t glyph_id) const
   {
-    switch (u.format.v) {
+    switch (u.format) {
     case 1: hb_barrier (); return u.format1.get_class (glyph_id);
     case 2: hb_barrier (); return u.format2.get_class (glyph_id);
 #ifndef HB_NO_BEYOND_64K
@@ -2055,7 +2097,7 @@ struct ClassDef
 
   unsigned get_population () const
   {
-    switch (u.format.v) {
+    switch (u.format) {
     case 1: hb_barrier (); return u.format1.get_population ();
     case 2: hb_barrier (); return u.format2.get_population ();
 #ifndef HB_NO_BEYOND_64K
@@ -2108,7 +2150,7 @@ struct ClassDef
 
 #ifndef HB_NO_BEYOND_64K
     if (glyph_max > 0xFFFFu)
-      u.format.v += 2;
+      u.format += 2;
     if (unlikely (glyph_max > 0xFFFFFFu))
 #else
     if (unlikely (glyph_max > 0xFFFFu))
@@ -2118,9 +2160,9 @@ struct ClassDef
       return_trace (false);
     }
 
-    u.format.v = format;
+    u.format = format;
 
-    switch (u.format.v)
+    switch (u.format)
     {
     case 1: hb_barrier (); return_trace (u.format1.serialize (c, it));
     case 2: hb_barrier (); return_trace (u.format2.serialize (c, it));
@@ -2139,7 +2181,7 @@ struct ClassDef
                const Coverage* glyph_filter = nullptr) const
   {
     TRACE_SUBSET (this);
-    switch (u.format.v) {
+    switch (u.format) {
     case 1: hb_barrier (); return_trace (u.format1.subset (c, klass_map, keep_empty_table, use_class_zero, glyph_filter));
     case 2: hb_barrier (); return_trace (u.format2.subset (c, klass_map, keep_empty_table, use_class_zero, glyph_filter));
 #ifndef HB_NO_BEYOND_64K
@@ -2153,9 +2195,9 @@ struct ClassDef
   bool sanitize (hb_sanitize_context_t *c) const
   {
     TRACE_SANITIZE (this);
-    if (!u.format.v.sanitize (c)) return_trace (false);
+    if (!u.format.sanitize (c)) return_trace (false);
     hb_barrier ();
-    switch (u.format.v) {
+    switch (u.format) {
     case 1: hb_barrier (); return_trace (u.format1.sanitize (c));
     case 2: hb_barrier (); return_trace (u.format2.sanitize (c));
 #ifndef HB_NO_BEYOND_64K
@@ -2168,7 +2210,7 @@ struct ClassDef
 
   unsigned cost () const
   {
-    switch (u.format.v) {
+    switch (u.format) {
     case 1: hb_barrier (); return u.format1.cost ();
     case 2: hb_barrier (); return u.format2.cost ();
 #ifndef HB_NO_BEYOND_64K
@@ -2184,7 +2226,7 @@ struct ClassDef
   template <typename set_t>
   bool collect_coverage (set_t *glyphs) const
   {
-    switch (u.format.v) {
+    switch (u.format) {
     case 1: hb_barrier (); return u.format1.collect_coverage (glyphs);
     case 2: hb_barrier (); return u.format2.collect_coverage (glyphs);
 #ifndef HB_NO_BEYOND_64K
@@ -2200,7 +2242,7 @@ struct ClassDef
   template <typename set_t>
   bool collect_class (set_t *glyphs, unsigned int klass) const
   {
-    switch (u.format.v) {
+    switch (u.format) {
     case 1: hb_barrier (); return u.format1.collect_class (glyphs, klass);
     case 2: hb_barrier (); return u.format2.collect_class (glyphs, klass);
 #ifndef HB_NO_BEYOND_64K
@@ -2213,7 +2255,7 @@ struct ClassDef
 
   bool intersects (const hb_set_t *glyphs) const
   {
-    switch (u.format.v) {
+    switch (u.format) {
     case 1: hb_barrier (); return u.format1.intersects (glyphs);
     case 2: hb_barrier (); return u.format2.intersects (glyphs);
 #ifndef HB_NO_BEYOND_64K
@@ -2225,7 +2267,7 @@ struct ClassDef
   }
   bool intersects_class (const hb_set_t *glyphs, unsigned int klass) const
   {
-    switch (u.format.v) {
+    switch (u.format) {
     case 1: hb_barrier (); return u.format1.intersects_class (glyphs, klass);
     case 2: hb_barrier (); return u.format2.intersects_class (glyphs, klass);
 #ifndef HB_NO_BEYOND_64K
@@ -2238,7 +2280,7 @@ struct ClassDef
 
   void intersected_class_glyphs (const hb_set_t *glyphs, unsigned klass, hb_set_t *intersect_glyphs) const
   {
-    switch (u.format.v) {
+    switch (u.format) {
     case 1: hb_barrier (); return u.format1.intersected_class_glyphs (glyphs, klass, intersect_glyphs);
     case 2: hb_barrier (); return u.format2.intersected_class_glyphs (glyphs, klass, intersect_glyphs);
 #ifndef HB_NO_BEYOND_64K
@@ -2251,7 +2293,7 @@ struct ClassDef
 
   void intersected_classes (const hb_set_t *glyphs, hb_set_t *intersect_classes) const
   {
-    switch (u.format.v) {
+    switch (u.format) {
     case 1: hb_barrier (); return u.format1.intersected_classes (glyphs, intersect_classes);
     case 2: hb_barrier (); return u.format2.intersected_classes (glyphs, intersect_classes);
 #ifndef HB_NO_BEYOND_64K
@@ -2265,7 +2307,7 @@ struct ClassDef
 
   protected:
   union {
-  struct { HBUINT16 v; }	format;		/* Format identifier */
+  HBUINT16			format;		/* Format identifier */
   ClassDefFormat1_3<SmallTypes>	format1;
   ClassDefFormat2_4<SmallTypes>	format2;
 #ifndef HB_NO_BEYOND_64K
@@ -2274,7 +2316,7 @@ struct ClassDef
 #endif
   } u;
   public:
-  DEFINE_SIZE_UNION (2, format.v);
+  DEFINE_SIZE_UNION (2, format);
 };
 
 template<typename Iterator>
@@ -2586,17 +2628,7 @@ struct hb_scalar_cache_t
   void clear ()
   {
     auto *values = &static_values[0];
-    unsigned i = 0;
-#ifndef HB_OPTIMIZE_SIZE
-    for (; i + 3 < length; i += 4)
-    {
-      values[i + 0] = INVALID;
-      values[i + 1] = INVALID;
-      values[i + 2] = INVALID;
-      values[i + 3] = INVALID;
-    }
-#endif
-    for (; i < length; i++)
+    for (unsigned i = 0; i < length; i++)
       values[i] = INVALID;
   }
 
@@ -2610,17 +2642,12 @@ struct hb_scalar_cache_t
     }
     auto *values = &static_values[0];
     auto *cached_value = &values[i];
-    // Super hot. Most common path is that we have a cached value of 0.
-    int v = *cached_value;
-    if (likely (!v))
+    if (*cached_value != INVALID)
     {
-      *value = 0.f;
+      *value = *cached_value ? *cached_value * DIVISOR : 0.f;
       return true;
     }
-    if (v == INVALID)
-      return false;
-    *value = v * DIVISOR;
-    return true;
+    return false;
   }
 
   HB_ALWAYS_INLINE
@@ -3736,8 +3763,8 @@ struct DeltaSetIndexMap
   {
     TRACE_SERIALIZE (this);
     unsigned length = plan.get_output_map ().length;
-    u.format.v = length <= 0xFFFF ? 0 : 1;
-    switch (u.format.v) {
+    u.format = length <= 0xFFFF ? 0 : 1;
+    switch (u.format) {
     case 0: hb_barrier (); return_trace (u.format0.serialize (c, plan));
     case 1: hb_barrier (); return_trace (u.format1.serialize (c, plan));
     default:return_trace (false);
@@ -3746,7 +3773,7 @@ struct DeltaSetIndexMap
 
   uint32_t map (unsigned v) const
   {
-    switch (u.format.v) {
+    switch (u.format) {
     case 0: hb_barrier (); return (u.format0.map (v));
     case 1: hb_barrier (); return (u.format1.map (v));
     default:return v;
@@ -3755,7 +3782,7 @@ struct DeltaSetIndexMap
 
   unsigned get_map_count () const
   {
-    switch (u.format.v) {
+    switch (u.format) {
     case 0: hb_barrier (); return u.format0.get_map_count ();
     case 1: hb_barrier (); return u.format1.get_map_count ();
     default:return 0;
@@ -3764,7 +3791,7 @@ struct DeltaSetIndexMap
 
   unsigned get_width () const
   {
-    switch (u.format.v) {
+    switch (u.format) {
     case 0: hb_barrier (); return u.format0.get_width ();
     case 1: hb_barrier (); return u.format1.get_width ();
     default:return 0;
@@ -3773,7 +3800,7 @@ struct DeltaSetIndexMap
 
   unsigned get_inner_bit_count () const
   {
-    switch (u.format.v) {
+    switch (u.format) {
     case 0: hb_barrier (); return u.format0.get_inner_bit_count ();
     case 1: hb_barrier (); return u.format1.get_inner_bit_count ();
     default:return 0;
@@ -3783,9 +3810,9 @@ struct DeltaSetIndexMap
   bool sanitize (hb_sanitize_context_t *c) const
   {
     TRACE_SANITIZE (this);
-    if (!u.format.v.sanitize (c)) return_trace (false);
+    if (!u.format.sanitize (c)) return_trace (false);
     hb_barrier ();
-    switch (u.format.v) {
+    switch (u.format) {
     case 0: hb_barrier (); return_trace (u.format0.sanitize (c));
     case 1: hb_barrier (); return_trace (u.format1.sanitize (c));
     default:return_trace (true);
@@ -3795,7 +3822,7 @@ struct DeltaSetIndexMap
   DeltaSetIndexMap* copy (hb_serialize_context_t *c) const
   {
     TRACE_SERIALIZE (this);
-    switch (u.format.v) {
+    switch (u.format) {
     case 0: hb_barrier (); return_trace (reinterpret_cast<DeltaSetIndexMap *> (u.format0.copy (c)));
     case 1: hb_barrier (); return_trace (reinterpret_cast<DeltaSetIndexMap *> (u.format1.copy (c)));
     default:return_trace (nullptr);
@@ -3804,12 +3831,12 @@ struct DeltaSetIndexMap
 
   protected:
   union {
-  struct { HBUINT8 v; }             format;         /* Format identifier */
+  HBUINT8                            format;         /* Format identifier */
   DeltaSetIndexMapFormat01<HBUINT16> format0;
   DeltaSetIndexMapFormat01<HBUINT32> format1;
   } u;
   public:
-  DEFINE_SIZE_UNION (1, format.v);
+  DEFINE_SIZE_UNION (1, format);
 };
 
 
@@ -4212,7 +4239,7 @@ struct Condition
   bool evaluate (const int *coords, unsigned int coord_len,
 		 Instancer *instancer) const
   {
-    switch (u.format.v) {
+    switch (u.format) {
     case 1: hb_barrier (); return u.format1.evaluate (coords, coord_len, instancer);
     case 2: hb_barrier (); return u.format2.evaluate (coords, coord_len, instancer);
     case 3: hb_barrier (); return u.format3.evaluate (coords, coord_len, instancer);
@@ -4225,7 +4252,7 @@ struct Condition
   Cond_with_Var_flag_t keep_with_variations (hb_collect_feature_substitutes_with_var_context_t *c,
                                              hb_map_t *condition_map /* OUT */) const
   {
-    switch (u.format.v) {
+    switch (u.format) {
     case 1: hb_barrier (); return u.format1.keep_with_variations (c, condition_map);
     // TODO(subset)
     default: c->apply = false; return KEEP_COND_WITH_VAR;
@@ -4235,9 +4262,9 @@ struct Condition
   template <typename context_t, typename ...Ts>
   typename context_t::return_t dispatch (context_t *c, Ts&&... ds) const
   {
-    if (unlikely (!c->may_dispatch (this, &u.format.v))) return c->no_dispatch_return_value ();
-    TRACE_DISPATCH (this, u.format.v);
-    switch (u.format.v) {
+    if (unlikely (!c->may_dispatch (this, &u.format))) return c->no_dispatch_return_value ();
+    TRACE_DISPATCH (this, u.format);
+    switch (u.format) {
     case 1: hb_barrier (); return_trace (c->dispatch (u.format1, std::forward<Ts> (ds)...));
     case 2: hb_barrier (); return_trace (c->dispatch (u.format2, std::forward<Ts> (ds)...));
     case 3: hb_barrier (); return_trace (c->dispatch (u.format3, std::forward<Ts> (ds)...));
@@ -4250,9 +4277,9 @@ struct Condition
   bool sanitize (hb_sanitize_context_t *c) const
   {
     TRACE_SANITIZE (this);
-    if (!u.format.v.sanitize (c)) return_trace (false);
+    if (!u.format.sanitize (c)) return_trace (false);
     hb_barrier ();
-    switch (u.format.v) {
+    switch (u.format) {
     case 1: hb_barrier (); return_trace (u.format1.sanitize (c));
     case 2: hb_barrier (); return_trace (u.format2.sanitize (c));
     case 3: hb_barrier (); return_trace (u.format3.sanitize (c));
@@ -4264,7 +4291,7 @@ struct Condition
 
   protected:
   union {
-  struct { HBUINT16 v; }	format;		/* Format identifier */
+  HBUINT16		format;		/* Format identifier */
   ConditionAxisRange	format1;
   ConditionValue	format2;
   ConditionAnd		format3;
@@ -4272,7 +4299,7 @@ struct Condition
   ConditionNegate	format5;
   } u;
   public:
-  DEFINE_SIZE_UNION (2, format.v);
+  DEFINE_SIZE_UNION (2, format);
 };
 
 template <typename Instancer>

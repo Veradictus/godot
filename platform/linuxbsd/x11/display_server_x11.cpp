@@ -36,7 +36,6 @@
 #include "x11/key_mapping_x11.h"
 
 #include "core/config/project_settings.h"
-#include "core/input/input.h"
 #include "core/io/file_access.h"
 #include "core/math/math_funcs.h"
 #include "core/os/main_loop.h"

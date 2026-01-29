@@ -32,7 +32,6 @@
 
 #include "embedded_process_macos.h"
 
-#include "core/input/input.h"
 #include "editor/editor_node.h"
 #include "editor/gui/window_wrapper.h"
 

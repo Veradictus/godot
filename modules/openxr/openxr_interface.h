@@ -232,10 +232,6 @@ public:
 
 	SessionState get_session_state();
 
-	/** User presence. */
-	bool is_user_presence_supported() const;
-	bool is_user_present() const;
-
 	/** Hand tracking. */
 	enum Hand {
 		HAND_LEFT,

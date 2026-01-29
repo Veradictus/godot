@@ -39,7 +39,6 @@
 #import "godot_application_delegate.h"
 
 #include "core/crypto/crypto_core.h"
-#include "core/input/input.h"
 #include "core/io/file_access.h"
 #include "core/os/main_loop.h"
 #include "core/profiling/profiling.h"

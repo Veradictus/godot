@@ -31,7 +31,6 @@
 #include "project_manager.h"
 
 #include "core/config/project_settings.h"
-#include "core/input/input.h"
 #include "core/io/config_file.h"
 #include "core/io/dir_access.h"
 #include "core/io/file_access.h"
