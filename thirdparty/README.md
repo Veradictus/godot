@@ -368,6 +368,21 @@ Files extracted from upstream source:
 - `LICENSE.TXT` and `docs/FTL.TXT`
 
 
+## gamepadmotionhelpers
+
+- Upstream: https://github.com/JibbSmart/GamepadMotionHelpers
+- Version: 39b578aacf34c3a1c584d8f7f194adc776f88055, 2023
+- License: MIT
+
+Files extracted from upstream source:
+
+- `GamepadMotion.hpp`
+- `LICENSE.TXT`
+
+Patches:
+
+- `0001-fix-warnings.patch` ([GH-111679](https://github.com/godotengine/godot/pull/111679))
+
 ## glad
 
 - Upstream: https://github.com/Dav1dde/glad
@@ -711,19 +726,6 @@ Files extracted from upstream repository:
 - `LICENSE.md`
 
 
-## mimalloc
-
-- Upstream: https://github.com/microsoft/mimalloc
-- Version: v2.1.7 (8c532c32c3c96e5ba1f2283e032f69ead8add00f, 2024)
-- License: MIT
-
-Files extracted from upstream repository:
-
-- All files in `include/`
-- All files in `src/`
-- `LICENSE`
-
-
 ## mingw-std-threads
 
 - Upstream: https://github.com/meganz/mingw-std-threads
@@ -1012,6 +1014,7 @@ Patches:
 - `0004-errno-include.patch` ([GH-108354](https://github.com/godotengine/godot/pull/108354))
 - `0005-fix-libudev-dbus.patch` ([GH-108373](https://github.com/godotengine/godot/pull/108373))
 - `0006-fix-cs-environ.patch` ([GH-109283](https://github.com/godotengine/godot/pull/109283))
+- `0007-shield-duplicate-macos.patch` ([GH-115510](https://github.com/godotengine/godot/pull/115510))
 
 
 ## spirv-cross

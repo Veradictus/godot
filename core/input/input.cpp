@@ -42,6 +42,10 @@
 #include "core/os/thread.h"
 #endif
 
+#include "thirdparty/gamepadmotionhelpers/GamepadMotion.hpp"
+
+#define STANDARD_GRAVITY 9.80665f
+
 static const char *_joy_buttons[(size_t)JoyButton::SDL_MAX] = {
 	"a",
 	"b",
@@ -161,6 +165,20 @@ void Input::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_accelerometer"), &Input::get_accelerometer);
 	ClassDB::bind_method(D_METHOD("get_magnetometer"), &Input::get_magnetometer);
 	ClassDB::bind_method(D_METHOD("get_gyroscope"), &Input::get_gyroscope);
+	ClassDB::bind_method(D_METHOD("get_joy_accelerometer", "device"), &Input::get_joy_accelerometer);
+	ClassDB::bind_method(D_METHOD("get_joy_gravity", "device"), &Input::get_joy_gravity);
+	ClassDB::bind_method(D_METHOD("get_joy_gyroscope", "device"), &Input::get_joy_gyroscope);
+	ClassDB::bind_method(D_METHOD("get_joy_motion_sensors_rate", "device"), &Input::get_joy_motion_sensors_rate);
+	ClassDB::bind_method(D_METHOD("is_joy_motion_sensors_enabled", "device"), &Input::is_joy_motion_sensors_enabled);
+	ClassDB::bind_method(D_METHOD("set_joy_motion_sensors_enabled", "device", "enable"), &Input::set_joy_motion_sensors_enabled);
+	ClassDB::bind_method(D_METHOD("has_joy_motion_sensors", "device"), &Input::has_joy_motion_sensors);
+	ClassDB::bind_method(D_METHOD("start_joy_motion_sensors_calibration", "device"), &Input::start_joy_motion_sensors_calibration);
+	ClassDB::bind_method(D_METHOD("stop_joy_motion_sensors_calibration", "device"), &Input::stop_joy_motion_sensors_calibration);
+	ClassDB::bind_method(D_METHOD("clear_joy_motion_sensors_calibration", "device"), &Input::clear_joy_motion_sensors_calibration);
+	ClassDB::bind_method(D_METHOD("get_joy_motion_sensors_calibration", "device"), &Input::get_joy_motion_sensors_calibration);
+	ClassDB::bind_method(D_METHOD("set_joy_motion_sensors_calibration", "device", "calibration_info"), &Input::set_joy_motion_sensors_calibration);
+	ClassDB::bind_method(D_METHOD("is_joy_motion_sensors_calibrated", "device"), &Input::is_joy_motion_sensors_calibrated);
+	ClassDB::bind_method(D_METHOD("is_joy_motion_sensors_calibrating", "device"), &Input::is_joy_motion_sensors_calibrating);
 	ClassDB::bind_method(D_METHOD("set_gravity", "value"), &Input::set_gravity);
 	ClassDB::bind_method(D_METHOD("set_accelerometer", "value"), &Input::set_accelerometer);
 	ClassDB::bind_method(D_METHOD("set_magnetometer", "value"), &Input::set_magnetometer);
@@ -720,6 +738,11 @@ void Input::joy_connection_changed(int p_idx, bool p_connected, const String &p_
 		for (int i = 0; i < (int)JoyAxis::MAX; i++) {
 			set_joy_axis(p_idx, (JoyAxis)i, 0.0f);
 		}
+		MotionInfo *motion = joy_motion.getptr(p_idx);
+		if (motion != nullptr && motion->gamepad_motion != nullptr) {
+			delete motion->gamepad_motion;
+		}
+		joy_motion.erase(p_idx);
 	}
 	joy_names[p_idx] = js;
 
@@ -1853,6 +1876,16 @@ void Input::_update_joypad_features(int p_device) {
 	}
 	if (joypad->features->has_joy_light()) {
 		joypad->has_light = true;
+	}
+	if (joypad->features->has_joy_motion_sensors()) {
+		MotionInfo &motion = joy_motion[p_device];
+
+		if (!motion.gamepad_motion) {
+			motion.gamepad_motion = new GamepadMotion();
+		} else {
+			motion.gamepad_motion->Reset();
+		}
+		motion.last_timestamp = OS::get_singleton()->get_ticks_msec();
 	}
 }
 

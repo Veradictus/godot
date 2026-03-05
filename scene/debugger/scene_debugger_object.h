@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  joypad_sdl.h                                                          */
+/*  scene_debugger_object.h                                               */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */
@@ -30,46 +30,69 @@
 
 #pragma once
 
-#include "core/input/input.h"
-#include "core/os/thread.h"
+#ifdef DEBUG_ENABLED
 
-typedef uint32_t SDL_JoystickID;
-typedef struct SDL_Joystick SDL_Joystick;
-typedef struct SDL_Gamepad SDL_Gamepad;
+#include "core/object/object.h"
+#include "core/string/ustring.h"
+#include "core/templates/list.h"
+#include "core/templates/pair.h"
 
-class JoypadSDL {
-public:
-	~JoypadSDL();
+class Node;
+class Script;
 
-	Error initialize();
-	void process_events();
-
+class SceneDebuggerObject {
 private:
-	class Joypad : public Input::JoypadFeatures {
-	public:
-		bool attached = false;
-		StringName guid;
+	void _parse_script_properties(Script *p_script, ScriptInstance *p_instance);
 
-		SDL_JoystickID sdl_instance_idx;
+public:
+	typedef Pair<PropertyInfo, Variant> SceneDebuggerProperty;
+	ObjectID id;
+	String class_name;
+	List<SceneDebuggerProperty> properties;
 
-		bool supports_force_feedback = false;
-		bool supports_motion_sensors = false;
-		uint64_t ff_effect_timestamp = 0;
+	SceneDebuggerObject(ObjectID p_id);
+	SceneDebuggerObject(Object *p_obj);
+	SceneDebuggerObject() {}
 
-		virtual bool has_joy_light() const override;
-		virtual void set_joy_light(const Color &p_color) override;
+	void serialize(Array &r_arr, int p_max_size = 1 << 20);
+	void deserialize(const Array &p_arr);
+	void deserialize(uint64_t p_id, const String &p_class_name, const Array &p_props);
+};
 
-		virtual bool has_joy_motion_sensors() const override;
-		virtual void set_joy_motion_sensors_enabled(bool p_enable) override;
+class SceneDebuggerTree {
+public:
+	struct RemoteNode {
+		int child_count = 0;
+		String name;
+		String type_name;
+		ObjectID id;
+		String scene_file_path;
+		uint8_t view_flags = 0;
 
-		virtual bool has_joy_vibration() const override;
+		enum ViewFlags {
+			VIEW_HAS_VISIBLE_METHOD = 1 << 1,
+			VIEW_VISIBLE = 1 << 2,
+			VIEW_VISIBLE_IN_TREE = 1 << 3,
+		};
 
-		SDL_Joystick *get_sdl_joystick() const;
-		SDL_Gamepad *get_sdl_gamepad() const;
+		RemoteNode(int p_child, const String &p_name, const String &p_type, ObjectID p_id, const String p_scene_file_path, int p_view_flags) {
+			child_count = p_child;
+			name = p_name;
+			type_name = p_type;
+			id = p_id;
+
+			scene_file_path = p_scene_file_path;
+			view_flags = p_view_flags;
+		}
+
+		RemoteNode() {}
 	};
 
-	Joypad joypads[Input::JOYPADS_MAX];
-	HashMap<SDL_JoystickID, int> sdl_instance_id_to_joypad_id;
+	List<RemoteNode> nodes;
 
-	void close_joypad(int p_pad_idx);
+	void serialize(Array &r_arr);
+	void deserialize(const Array &p_arr);
+	SceneDebuggerTree(Node *p_root);
+	SceneDebuggerTree() {}
 };
+#endif // DEBUG_ENABLED

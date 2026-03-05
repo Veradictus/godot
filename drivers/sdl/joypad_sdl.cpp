@@ -205,6 +205,11 @@ void JoypadSDL::process_events() {
 						joypad_info);
 
 				Input::get_singleton()->set_joy_features(joy_id, &joypads[joy_id]);
+
+				if (joypads[joy_id].supports_motion_sensors) {
+					// Data rate for all sensors should be the same.
+					Input::get_singleton()->set_joy_motion_sensors_rate(joy_id, SDL_GetGamepadSensorDataRate(gamepad, SDL_SENSOR_ACCEL));
+				}
 			}
 			// An event for an attached joypad
 		} else if (sdl_event.type >= SDL_EVENT_JOYSTICK_AXIS_MOTION && sdl_event.type < SDL_EVENT_FINGER_DOWN && sdl_instance_id_to_joypad_id.has(sdl_event.jdevice.which)) {
@@ -278,6 +283,25 @@ void JoypadSDL::process_events() {
 					break;
 			}
 		}
+	}
+
+	for (int i = 0; i < Input::JOYPADS_MAX; i++) {
+		Joypad &joy = joypads[i];
+		if (!joy.attached || !joy.supports_motion_sensors) {
+			continue;
+		}
+		SDL_Gamepad *gamepad = SDL_GetGamepadFromID(joy.sdl_instance_idx);
+		// gamepad should not be NULL since joy.supports_motion_sensors is true here.
+
+		float accel_data[3];
+		float gyro_data[3];
+		SDL_GetGamepadSensorData(gamepad, SDL_SENSOR_ACCEL, accel_data, 3);
+		SDL_GetGamepadSensorData(gamepad, SDL_SENSOR_GYRO, gyro_data, 3);
+
+		Input::get_singleton()->joy_motion_sensors(
+				i,
+				Vector3(-accel_data[0], -accel_data[1], -accel_data[2]),
+				Vector3(gyro_data[0], gyro_data[1], gyro_data[2]));
 	}
 }
 
