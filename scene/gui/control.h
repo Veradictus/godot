@@ -30,16 +30,17 @@
 
 #pragma once
 
-#include "core/math/transform_2d.h"
-#include "core/object/gdvirtual.gen.inc"
+#include "core/object/gdvirtual.gen.h"
 #include "scene/main/canvas_item.h"
 #include "scene/resources/theme.h"
+#include "servers/display/accessibility_server_enums.h"
 
-class Viewport;
 class Label;
 class Panel;
-class ThemeOwner;
 class ThemeContext;
+class ThemeOwner;
+class Viewport;
+struct Transform2D;
 
 class Control : public CanvasItem {
 	GDCLASS(Control, CanvasItem);
@@ -97,6 +98,7 @@ public:
 		MOUSE_BEHAVIOR_ENABLED,
 	};
 
+	// Keep synced with InputClassEnums and DisplayServerEnums enums.
 	enum CursorShape {
 		CURSOR_ARROW,
 		CURSOR_IBEAM,
@@ -223,6 +225,8 @@ private:
 		bool updating_last_minimum_size = false;
 		bool block_minimum_size_adjust = false;
 
+		bool layout_pending = false;
+
 		bool size_warning = true;
 
 		// Container sizing.
@@ -257,7 +261,7 @@ private:
 
 		String accessibility_name;
 		String accessibility_description;
-		DisplayServer::AccessibilityLiveMode accessibility_live = DisplayServer::AccessibilityLiveMode::LIVE_OFF;
+		AccessibilityServerEnums::AccessibilityLiveMode accessibility_live = AccessibilityServerEnums::AccessibilityLiveMode::LIVE_OFF;
 
 		TypedArray<NodePath> accessibility_controls_nodes;
 		TypedArray<NodePath> accessibility_described_by_nodes;
@@ -553,6 +557,13 @@ public:
 	void set_custom_minimum_size(const Size2 &p_custom);
 	Size2 get_custom_minimum_size() const;
 
+	bool is_layout_pending() const;
+	bool is_layout_pending_in_tree() const;
+	void layout_pending_start();
+	void layout_pending_finish();
+	Control *get_layout_pending_control_in_tree() const;
+	void call_on_all_layout_pending_finished(const Callable &p_callable);
+
 	// Container sizing.
 
 	void set_h_size_flags(BitField<SizeFlags> p_flags);
@@ -631,8 +642,8 @@ public:
 	void set_accessibility_description(const String &p_description);
 	String get_accessibility_description() const;
 
-	void set_accessibility_live(DisplayServer::AccessibilityLiveMode p_mode);
-	DisplayServer::AccessibilityLiveMode get_accessibility_live() const;
+	void set_accessibility_live(AccessibilityServerEnums::AccessibilityLiveMode p_mode);
+	AccessibilityServerEnums::AccessibilityLiveMode get_accessibility_live() const;
 
 	void set_accessibility_controls_nodes(const TypedArray<NodePath> &p_node_path);
 	TypedArray<NodePath> get_accessibility_controls_nodes() const;

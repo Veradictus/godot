@@ -38,6 +38,7 @@
 #include "action_map/openxr_haptic_feedback.h"
 #include "action_map/openxr_interaction_profile.h"
 #include "action_map/openxr_interaction_profile_metadata.h"
+#include "core/object/class_db.h"
 #include "openxr_api_extension.h"
 #include "openxr_interface.h"
 
@@ -99,7 +100,9 @@
 #include "extensions/platform/openxr_android_extension.h"
 #endif
 
+#include "core/config/engine.h"
 #include "core/config/project_settings.h"
+#include "core/os/os.h"
 #include "main/main.h"
 
 #ifdef TOOLS_ENABLED
@@ -143,7 +146,6 @@ void initialize_openxr_module(ModuleInitializationLevel p_level) {
 		GDREGISTER_CLASS(OpenXRRenderModelExtension);
 #endif
 		GDREGISTER_CLASS(OpenXRAndroidThreadSettingsExtension);
-		GDREGISTER_CLASS(OpenXRUserPresenceExtension);
 
 		// Note, we're not registering all wrapper classes here, there is no point in exposing them
 		// if there isn't specific logic to expose.
@@ -219,7 +221,6 @@ void initialize_openxr_module(ModuleInitializationLevel p_level) {
 			// Register user presence extension as a singleton
 			OpenXRUserPresenceExtension *user_presence_extension = memnew(OpenXRUserPresenceExtension);
 			OpenXRAPI::register_extension_wrapper(user_presence_extension);
-			Engine::get_singleton()->add_singleton(Engine::Singleton("OpenXRUserPresenceExtension", user_presence_extension));
 
 			// register gated extensions
 			if (int(GLOBAL_GET("xr/openxr/extensions/debug_utils")) > 0) {

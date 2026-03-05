@@ -2538,6 +2538,19 @@
 		<constant name="SUPPORTS_IMAGE_ATOMIC_32_BIT" value="7" enum="Features">
 			Support for 32-bit image atomic operations.
 		</constant>
+		<constant name="SUPPORTS_RAY_QUERY" value="11" enum="Features">
+			Support for ray query extension.
+
+			[b]Note:[/b] This is currently only supported when using Vulkan. This is not supported on macOS and iOS (even on hardware supporting raytracing) due to MoltenVK limitations.
+		</constant>
+		<constant name="SUPPORTS_RAYTRACING_PIPELINE" value="12" enum="Features">
+			Support for raytracing pipeline extension.
+
+			[b]Note:[/b] This is currently only supported when using Vulkan. This is not supported on macOS and iOS (even on hardware supporting raytracing) due to MoltenVK limitations.
+		</constant>
+		<constant name="SUPPORTS_HDR_OUTPUT" value="13" enum="Features">
+			Support for high dynamic range (HDR) output.
+		</constant>
 		<constant name="LIMIT_MAX_BOUND_UNIFORM_SETS" value="0" enum="Limit">
 			Maximum number of uniform sets that can be bound at a given time.
 		</constant>

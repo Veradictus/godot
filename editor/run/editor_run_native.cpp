@@ -30,6 +30,8 @@
 
 #include "editor_run_native.h"
 
+#include "core/object/callable_mp.h"
+#include "core/object/class_db.h"
 #include "editor/editor_node.h"
 #include "editor/export/editor_export.h"
 #include "editor/export/editor_export_platform.h"
@@ -166,7 +168,7 @@ void EditorRunNative::resume_run_native() {
 }
 
 void EditorRunNative::_bind_methods() {
-	ADD_SIGNAL(MethodInfo("native_run", PropertyInfo(Variant::OBJECT, "preset", PROPERTY_HINT_RESOURCE_TYPE, "EditorExportPreset")));
+	ADD_SIGNAL(MethodInfo("native_run", PropertyInfo(Variant::OBJECT, "preset", PROPERTY_HINT_RESOURCE_TYPE, EditorExportPreset::get_class_static())));
 }
 
 bool EditorRunNative::is_deploy_debug_remote_enabled() const {

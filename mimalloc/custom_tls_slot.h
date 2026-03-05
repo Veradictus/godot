@@ -33,10 +33,13 @@
 
 #include <stddef.h>
 
-// This is included both in the third-party and the engine code
-// to ensure both mimalloc and Godot see the same, non-default,
-// signatures. Otherwise, for instance, in mimalloc mi_prim_tls_slot()
-// could be assumed to return 'int', which would truncate pointers.
+#include "core/object/object.h"
+#include "core/string/ustring.h"
+#include "core/templates/list.h"
+#include "core/templates/pair.h"
+
+class Node;
+class Script;
 
 #define MI_HAS_TLS_SLOT
 #define MI_TLS_SLOT 0
