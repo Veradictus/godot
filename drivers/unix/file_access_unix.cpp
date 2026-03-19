@@ -236,7 +236,7 @@ String FileAccessUnix::get_path_absolute() const {
 
 #if defined(TOOLS_ENABLED)
 String FileAccessUnix::get_real_path() const {
-	char *resolved_path = mi_realpath(path.utf8().get_data(), nullptr);
+	char *resolved_path = realpath(path.utf8().get_data(), nullptr);
 
 	if (!resolved_path) {
 		return path;
