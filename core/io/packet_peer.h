@@ -31,11 +31,10 @@
 #ifndef PACKET_PEER_H
 #define PACKET_PEER_H
 
-#include "core/io/stream_peer.h"
-#include "core/templates/ring_buffer.h"
-
 #include "core/extension/ext_wrappers.gen.h"
+#include "core/io/stream_peer.h"
 #include "core/object/gdvirtual.gen.h"
+#include "core/templates/ring_buffer.h"
 #include "core/variant/native_ptr.h"
 
 class PacketPeer : public RefCounted {

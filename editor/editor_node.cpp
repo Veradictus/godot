@@ -3125,7 +3125,7 @@ void EditorNode::_edit_current(bool p_skip_foreign, bool p_skip_inspector_update
 	}
 
 	// Update the use folding setting and state.
-	bool disable_folding = bool(EDITOR_GET("interface/inspector/disable_folding")) || current_obj->is_class("EditorDebuggerRemoteObjects");
+	bool disable_folding = EDITOR_GET("interface/inspector/disable_folding");
 	if (InspectorDock::get_inspector_singleton()->is_using_folding() == disable_folding) {
 		InspectorDock::get_inspector_singleton()->set_use_folding(!disable_folding, false);
 	}
@@ -6780,6 +6780,8 @@ void EditorNode::set_distraction_free_mode(bool p_enter) {
 	} else {
 		editor_dock_manager->set_docks_visible(true);
 	}
+
+	emit_signal(SNAME("distraction_free_mode_changed"), p_enter);
 }
 
 bool EditorNode::is_distraction_free_mode_enabled() const {
@@ -7801,6 +7803,7 @@ void EditorNode::_bind_methods() {
 	ADD_SIGNAL(MethodInfo("scene_closed", PropertyInfo(Variant::STRING, "path")));
 	ADD_SIGNAL(MethodInfo("preview_locale_changed"));
 	ADD_SIGNAL(MethodInfo("resource_counter_changed"));
+	ADD_SIGNAL(MethodInfo("distraction_free_mode_changed", PropertyInfo(Variant::BOOL, "enabled")));
 }
 
 static Node *_resource_get_edited_scene() {
@@ -9119,6 +9122,7 @@ EditorNode::EditorNode() {
 	{
 		Dictionary offsets;
 		offsets["Audio"] = -450;
+		offsets["Output"] = -270;
 		default_layout->set_value(EDITOR_NODE_CONFIG_SECTION, "bottom_panel_offsets", offsets);
 	}
 
