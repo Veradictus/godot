@@ -28,8 +28,7 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#ifndef PACKET_PEER_H
-#define PACKET_PEER_H
+#pragma once
 
 #include "core/extension/ext_wrappers.gen.h"
 #include "core/io/stream_peer.h"
@@ -119,5 +118,3 @@ public:
 	int get_output_buffer_max_size() const;
 	PacketPeerStream();
 };
-
-#endif // PACKET_PEER_H

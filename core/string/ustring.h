@@ -539,8 +539,6 @@ public:
 	Error append_utf8(const Span<char> &p_range) {
 		return append_utf8(p_range.ptr(), p_range.size());
 	}
-	Error parse_utf8(const char *p_utf8, int p_len = -1, bool p_skip_cr = false);
-
 	static String utf8(const char *p_utf8, int p_len = -1) {
 		String ret;
 		ret.append_utf8(p_utf8, p_len);
