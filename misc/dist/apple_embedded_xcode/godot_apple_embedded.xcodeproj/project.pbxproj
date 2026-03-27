@@ -244,7 +244,8 @@
 				COPY_PHASE_STRIP = NO;
 				ENABLE_BITCODE = NO;
 				"FRAMEWORK_SEARCH_PATHS[arch=*]" = (
-					"$(PROJECT_DIR)/**",
+					"$(PROJECT_DIR)",
+					"$(PROJECT_DIR)/$binary/dylibs",
 				);
 				GCC_C_LANGUAGE_STANDARD = gnu99;
 				GCC_DYNAMIC_NO_PIC = NO;
@@ -263,7 +264,7 @@
 				"LD_CLASSIC_1500" = "-ld_classic";
 				"LD_CLASSIC_1501" = "-ld_classic";
 				"LD_CLASSIC_1510" = "-ld_classic";
-				OTHER_LDFLAGS = "$(LD_CLASSIC_$(XCODE_VERSION_ACTUAL)) $linker_flags";
+				OTHER_LDFLAGS = "$(LD_CLASSIC_$(XCODE_VERSION_ACTUAL)) -framework SwiftUI $linker_flags";
 				SDKROOT = $sdkroot;
 				TARGETED_DEVICE_FAMILY = "$targeted_device_family";
 			};
@@ -290,7 +291,8 @@
 				COPY_PHASE_STRIP = YES;
 				ENABLE_BITCODE = NO;
 				"FRAMEWORK_SEARCH_PATHS[arch=*]" = (
-					"$(PROJECT_DIR)/**",
+					"$(PROJECT_DIR)",
+					"$(PROJECT_DIR)/$binary/dylibs",
 				);
 				ENABLE_NS_ASSERTIONS = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu99;
@@ -304,7 +306,7 @@
 				"LD_CLASSIC_1500" = "-ld_classic";
 				"LD_CLASSIC_1501" = "-ld_classic";
 				"LD_CLASSIC_1510" = "-ld_classic";
-				OTHER_LDFLAGS = "$(LD_CLASSIC_$(XCODE_VERSION_ACTUAL)) $linker_flags";
+				OTHER_LDFLAGS = "$(LD_CLASSIC_$(XCODE_VERSION_ACTUAL)) -framework SwiftUI $linker_flags";
 				SDKROOT = $sdkroot;
 				TARGETED_DEVICE_FAMILY = "$targeted_device_family";
 				VALIDATE_PRODUCT = YES;
