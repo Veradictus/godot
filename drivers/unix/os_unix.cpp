@@ -72,6 +72,7 @@
 #endif
 
 #include <dlfcn.h>
+#include <spawn.h>
 #include <poll.h>
 #include <sys/resource.h>
 #include <sys/stat.h>
@@ -921,26 +922,27 @@ Error OS_Unix::execute(const String &p_path, const List<String> &p_arguments, St
 		return OK;
 	}
 
+	// Build args array before fork() to avoid heap allocations in the
+	// child process, which can crash with custom allocators (e.g. mimalloc).
+	Vector<CharString> cs;
+	cs.push_back(p_path.utf8());
+	for (const String &arg : p_arguments) {
+		cs.push_back(arg.utf8());
+	}
+
+	Vector<char *> args;
+	for (int i = 0; i < cs.size(); i++) {
+		args.push_back((char *)cs[i].get_data());
+	}
+	args.push_back(0);
+
 	pid_t pid = fork();
 	ERR_FAIL_COND_V(pid < 0, ERR_CANT_FORK);
 
 	if (pid == 0) {
 		// The child process
-		Vector<CharString> cs;
-		cs.push_back(p_path.utf8());
-		for (const String &arg : p_arguments) {
-			cs.push_back(arg.utf8());
-		}
-
-		Vector<char *> args;
-		for (int i = 0; i < cs.size(); i++) {
-			args.push_back((char *)cs[i].get_data());
-		}
-		args.push_back(0);
-
-		execvp(p_path.utf8().get_data(), &args[0]);
+		execvp(args[0], &args[0]);
 		// The execvp() function only returns if an error occurs.
-		ERR_PRINT("Could not create child process: " + p_path);
 		raise(SIGKILL);
 	}
 
@@ -959,32 +961,32 @@ Error OS_Unix::create_process(const String &p_path, const List<String> &p_argume
 	// Actual virtual call goes to OS_Web.
 	ERR_FAIL_V(ERR_BUG);
 #else
-	pid_t pid = fork();
-	ERR_FAIL_COND_V(pid < 0, ERR_CANT_FORK);
-
-	if (pid == 0) {
-		// The new process
-		// Create a new session-ID so parent won't wait for it.
-		// This ensures the process won't go zombie at the end.
-		setsid();
-
-		Vector<CharString> cs;
-		cs.push_back(p_path.utf8());
-		for (const String &arg : p_arguments) {
-			cs.push_back(arg.utf8());
-		}
-
-		Vector<char *> args;
-		for (int i = 0; i < cs.size(); i++) {
-			args.push_back((char *)cs[i].get_data());
-		}
-		args.push_back(0);
-
-		execvp(p_path.utf8().get_data(), &args[0]);
-		// The execvp() function only returns if an error occurs.
-		ERR_PRINT("Could not create child process: " + p_path);
-		raise(SIGKILL);
+	Vector<CharString> cs;
+	cs.push_back(p_path.utf8());
+	for (const String &arg : p_arguments) {
+		cs.push_back(arg.utf8());
 	}
+
+	Vector<char *> args;
+	for (int i = 0; i < cs.size(); i++) {
+		args.push_back((char *)cs[i].get_data());
+	}
+	args.push_back(nullptr);
+
+	// Use posix_spawn instead of fork()+exec() to avoid inheriting
+	// corrupted allocator state. Custom allocators like mimalloc use
+	// locks and TLS that are left inconsistent after fork().
+	posix_spawnattr_t attr;
+	posix_spawnattr_init(&attr);
+#ifdef POSIX_SPAWN_SETSID
+	posix_spawnattr_setflags(&attr, POSIX_SPAWN_SETSID);
+#endif
+
+	extern char **environ;
+	pid_t pid = 0;
+	int spawn_err = posix_spawnp(&pid, args[0], nullptr, &attr, &args[0], environ);
+	posix_spawnattr_destroy(&attr);
+	ERR_FAIL_COND_V(spawn_err != 0, ERR_CANT_FORK);
 
 	ProcessInfo pi;
 	process_map_mutex.lock();

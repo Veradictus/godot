@@ -3176,6 +3176,12 @@ void DisplayServerMacOS::_process_events(bool p_pump) {
 
 			[NSApp sendEvent:event];
 		}
+
+		// Run the CFRunLoop once to process pending run loop sources (XPC ports,
+		// dispatch queues, timers). This is needed for GDExtension plugins that use
+		// system frameworks like WKWebView which communicate via XPC through the
+		// run loop rather than through NSEvents.
+		CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0, true);
 	}
 
 	// Process "menu_callback"s.
