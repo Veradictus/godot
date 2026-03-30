@@ -18,9 +18,5 @@
  <true/>
  <key>com.apple.security.get-task-allow</key>
  <true/>
- <key>com.apple.developer.applesignin</key>
- <array>
-  <string>Default</string>
- </array>
 </dict>
 </plist>
