@@ -32,6 +32,8 @@ thirdparty_dir = "#thirdparty/mimalloc/"
 if override_type == "static":
     thirdparty_sources = ["src/static.c"]
     env_thirdparty.Append(CPPDEFINES=["MI_MALLOC_OVERRIDE"])
+    if env["platform"] == "macos":
+        env_thirdparty.Append(CPPDEFINES=[("MI_OSX_ZONE", 1)])
 else:
     thirdparty_sources = [
         "src/alloc.c",
@@ -96,7 +98,7 @@ lib = env.add_library("mimalloc", mimalloc_sources)
 # For override to work on non-Windows platforms, it must be linked first.
 # This way is somewhat hacky, but reliable.
 # Use full path and force it early in the link order.
-if env["platform"] == "osx":
+if env["platform"] == "macos":
     # For macOS, use -force_load to ensure mimalloc symbols are included.
     env.Prepend(LINKFLAGS=[f"-Wl,-force_load,{lib[0].get_path()}"])
 else:
