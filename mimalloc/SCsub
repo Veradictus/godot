@@ -40,6 +40,7 @@ else:
         "src/alloc-aligned.c",
         "src/alloc-posix.c",
         "src/arena.c",
+        "src/arena-meta.c",
         "src/bitmap.c",
         "src/heap.c",
         "src/init.c",
@@ -47,10 +48,11 @@ else:
         "src/options.c",
         "src/os.c",
         "src/page.c",
+        "src/page-map.c",
         "src/random.c",
-        "src/segment-map.c",
-        "src/segment.c",
         "src/stats.c",
+        "src/theap.c",
+        "src/threadlocal.c",
     ]
     if not env.get("mimalloc_custom_prims"):
         thirdparty_sources += ["src/prim/prim.c"]
