@@ -72,7 +72,9 @@
 #endif
 
 #include <dlfcn.h>
+#ifndef __ANDROID__
 #include <spawn.h>
+#endif
 #include <poll.h>
 #include <sys/resource.h>
 #include <sys/stat.h>
@@ -973,6 +975,18 @@ Error OS_Unix::create_process(const String &p_path, const List<String> &p_argume
 	}
 	args.push_back(nullptr);
 
+#ifdef __ANDROID__
+	// Android NDK doesn't implement posix_spawn, use fork()+exec().
+	// Args are pre-built above to avoid heap allocations after fork().
+	pid_t pid = fork();
+	ERR_FAIL_COND_V(pid < 0, ERR_CANT_FORK);
+
+	if (pid == 0) {
+		setsid();
+		execvp(args[0], &args[0]);
+		raise(SIGKILL);
+	}
+#else
 	// Use posix_spawn instead of fork()+exec() to avoid inheriting
 	// corrupted allocator state. Custom allocators like mimalloc use
 	// locks and TLS that are left inconsistent after fork().
@@ -987,6 +1001,7 @@ Error OS_Unix::create_process(const String &p_path, const List<String> &p_argume
 	int spawn_err = posix_spawnp(&pid, args[0], nullptr, &attr, &args[0], environ);
 	posix_spawnattr_destroy(&attr);
 	ERR_FAIL_COND_V(spawn_err != 0, ERR_CANT_FORK);
+#endif
 
 	ProcessInfo pi;
 	process_map_mutex.lock();
