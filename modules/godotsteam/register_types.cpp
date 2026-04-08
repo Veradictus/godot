@@ -72,8 +72,8 @@ protected:
 			add_shared_object(lib_path, tags);
 		}
 
-		// Bundle steam_appid.txt from the project root next to the executable.
-		if (FileAccess::exists("res://steam_appid.txt")) {
+		// Bundle steam_appid.txt from the project root next to the executable (desktop only).
+		if (!p_features.has("android") && !p_features.has("ios") && !p_features.has("web") && FileAccess::exists("res://steam_appid.txt")) {
 			String appid_path = ProjectSettings::get_singleton()->globalize_path("res://steam_appid.txt");
 			Vector<String> tags;
 			add_shared_object(appid_path, tags, p_features.has("macos") ? macos_target : String());
