@@ -6,5 +6,6 @@ lipo -create bin/godot.macos.editor.x86_64 bin/godot.macos.editor.arm64 -output 
 cp -r misc/dist/macos_tools.app ./Godot.app
 mkdir -p Godot.app/Contents/MacOS
 cp bin/godot.macos.editor.universal Godot.app/Contents/MacOS/Godot
+cp modules/godotsteam/sdk/redistributable_bin/osx/libsteam_api.dylib Godot.app/Contents/MacOS/
 chmod +x Godot.app/Contents/MacOS/Godot
 codesign --force --timestamp --options=runtime --entitlements misc/dist/macos/editor.entitlements -s - Godot.app

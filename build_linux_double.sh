@@ -1,5 +1,8 @@
 scons platform=linuxbsd target=editor precision=double
 
+# Copy Steam shared library next to the editor binary (RPATH=$ORIGIN)
+cp modules/godotsteam/sdk/redistributable_bin/linux64/libsteam_api.so bin/
+
 python3 misc/scripts/install_d3d12_sdk_windows.py
 scons platform=windows target=template_debug arch=x86_64 tools=no precision=double use_mingw=yes
 
