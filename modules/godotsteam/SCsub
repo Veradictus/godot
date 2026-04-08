@@ -1,9 +1,50 @@
 # SCsub
+import os
+
 Import('env')
 
 module_path = Dir('.').srcnode().abspath
+embed_steam_dll = False
 
 env.Append(CPPPATH=["%s/sdk/public/" % module_path])
+
+
+def _generate_embedded_dll(dll_path, output_path):
+    """Convert a DLL binary into a C++ source file containing a byte array.
+
+    Only rewrites the output if the content has changed, so incremental
+    builds skip recompilation when the SDK hasn't been updated.
+    """
+    with open(dll_path, 'rb') as f:
+        data = f.read()
+
+    lines = []
+    lines.append("// Auto-generated from Steam SDK DLL - do not edit manually.")
+    lines.append("#if defined(STEAM_EMBEDDED_DLL) && defined(_WIN32)")
+    lines.append("")
+    lines.append("#include <cstddef>")
+    lines.append("")
+    lines.append("extern const unsigned char embedded_steam_dll[] = {")
+    for i in range(0, len(data), 16):
+        chunk = data[i:i + 16]
+        lines.append("    " + ", ".join("0x{:02x}".format(b) for b in chunk) + ",")
+    lines.append("};")
+    lines.append("")
+    lines.append("extern const size_t embedded_steam_dll_size = sizeof(embedded_steam_dll);")
+    lines.append("")
+    lines.append("#endif // STEAM_EMBEDDED_DLL && _WIN32")
+    lines.append("")
+
+    content = "\n".join(lines)
+
+    if os.path.exists(output_path):
+        with open(output_path, 'r') as f:
+            if f.read() == content:
+                return  # Up-to-date, skip write.
+
+    with open(output_path, 'w') as f:
+        f.write(content)
+
 
 # If compiling Linux
 if env["platform"]== "linuxbsd" or env["platform"] == "server":
@@ -28,12 +69,19 @@ elif env["platform"] == "windows":
 	# Mostly VisualStudio
 	if env["CC"] == "cl":
 		if env['arch'] == "x86_32":
-			env.Append(LINKFLAGS=["steam_api.lib"])
+			env.Append(LINKFLAGS=["steam_api.lib", "/DELAYLOAD:steam_api.dll", "delayimp.lib"])
 			env.Append(LIBPATH=["%s/sdk/redistributable_bin" % module_path])
+			_generate_embedded_dll(
+				"%s/sdk/redistributable_bin/steam_api.dll" % module_path,
+				"%s/embedded_steam_dll.gen.cpp" % module_path)
 		else: # 64 bit
-			env.Append(LINKFLAGS=["steam_api64.lib"])
+			env.Append(LINKFLAGS=["steam_api64.lib", "/DELAYLOAD:steam_api64.dll", "delayimp.lib"])
 			env.Append(LIBPATH=["%s/sdk/redistributable_bin/win64" % module_path])
-	
+			_generate_embedded_dll(
+				"%s/sdk/redistributable_bin/win64/steam_api64.dll" % module_path,
+				"%s/embedded_steam_dll.gen.cpp" % module_path)
+		embed_steam_dll = True
+
 	# Mostly "GCC"
 	else:
 		if env['arch'] == "x86_32":
@@ -51,4 +99,7 @@ elif env["platform"] == "macos":
 env_steam = env.Clone()
 env_steam.disable_warnings()
 env_steam.Append(CPPDEFINES=[('GODOTSTEAM_SDK_PATH', '\\"' + module_path + '/sdk\\"')])
+if embed_steam_dll:
+	env_steam.Append(CPPDEFINES=["STEAM_EMBEDDED_DLL"])
+	env_steam.add_source_files(env.modules_sources, "%s/embedded_steam_dll.gen.cpp" % module_path)
 env_steam.add_source_files(env.modules_sources,"*.cpp")

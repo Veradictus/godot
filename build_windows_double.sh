@@ -2,8 +2,8 @@
 scons platform=windows precision=double
 
 # Build the export templates for Windows.
-scons platform=windows target=template_debug arch=x86_64 tools=no precision=double build_profile="kaetram.build" "angle_libs=C:\Users\flavi\Documents\Projects\angle"
-scons platform=windows target=template_release arch=x86_64 tools=no precision=double build_profile="kaetram.build" "angle_libs=C:\Users\flavi\Documents\Projects\angle"
+scons platform=windows target=template_debug arch=x86_64 tools=no precision=double build_profile="kaetram.build"
+scons platform=windows target=template_release arch=x86_64 tools=no precision=double build_profile="kaetram.build"
 
 # Rename the templates and place them in the correct directory.
 cp bin/godot.windows.template_debug.x86_64.console.exe bin/windows_debug_x86_64_console.exe
@@ -27,14 +27,14 @@ cd ../../..
 
 # Compile the Android build templates.
 # scons platform=android arch=arm32 target=template_debug build_profile="kaetram.build" precision=double 
-scons platform=android arch=arm64 target=template_debug build_profile="kaetram.build" precision=double 
-# scons platform=android arch=x86_32 target=template_debug build_profile="kaetram.build" precision=double 
-scons platform=android arch=x86_64 target=template_debug build_profile="kaetram.build" precision=double 
+scons platform=android arch=arm64 target=template_debug build_profile="kaetram.build" precision=double
+# scons platform=android arch=x86_32 target=template_debug build_profile="kaetram.build" precision=double
+scons platform=android arch=x86_64 target=template_debug build_profile="kaetram.build" precision=double
 
-# scons platform=android arch=arm32 target=template_release build_profile="kaetram.build" precision=double 
-scons platform=android arch=arm64 target=template_release build_profile="kaetram.build" precision=double 
-# scons platform=android arch=x86_32 target=template_release build_profile="kaetram.build" precision=double 
-scons platform=android arch=x86_64 target=template_release build_profile="kaetram.build" precision=double 
+# scons platform=android arch=arm32 target=template_release build_profile="kaetram.build" precision=double
+scons platform=android arch=arm64 target=template_release build_profile="kaetram.build" precision=double
+# scons platform=android arch=x86_32 target=template_release build_profile="kaetram.build" precision=double
+scons platform=android arch=x86_64 target=template_release build_profile="kaetram.build" precision=double
 
 # Compile via Gradle.
 cd platform/android/java

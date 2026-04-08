@@ -35,6 +35,10 @@
 #include "godotsteam_multiplayer_peer.h"
 #include "godotsteam_project_settings.h"
 
+#if defined(STEAM_EMBEDDED_DLL) && defined(_WIN32)
+#include "steam_embed.h"
+#endif
+
 #ifdef TOOLS_ENABLED
 #include "core/config/project_settings.h"
 #include "core/io/file_access.h"
@@ -92,6 +96,9 @@ static Steam *SteamPtr = nullptr;
 
 void initialize_godotsteam_module(ModuleInitializationLevel level) {
 	if (level == MODULE_INITIALIZATION_LEVEL_CORE) {
+#if defined(STEAM_EMBEDDED_DLL) && defined(_WIN32)
+		steam_embed_load_dll();
+#endif
 		GDREGISTER_CLASS(Steam);
 		SteamPtr = memnew(Steam);
 		Engine::get_singleton()->add_singleton(Engine::Singleton("Steam", Steam::get_singleton()));
