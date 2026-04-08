@@ -416,6 +416,33 @@ Error OS_MacOS::open_dynamic_library(const String &p_path, void *&p_library_hand
 		path = p_path;
 	}
 
+	// Pre-load GDExtension dependencies so @rpath references resolve in the editor.
+	// During export, dependencies are copied next to the executable, but in the editor
+	// the executable is the Godot binary itself so @rpath won't include addon directories.
+	// We also copy the dependency next to the main library so dyld resolves @rpath from
+	// the same directory (dyld searches the loading library's directory for @rpath).
+	if (p_data != nullptr && p_data->library_dependencies != nullptr) {
+		String lib_dir = path.get_base_dir();
+		for (const String &dep_path : *p_data->library_dependencies) {
+			String dep_resolved = get_framework_executable(dep_path);
+			if (!FileAccess::exists(dep_resolved)) {
+				continue;
+			}
+
+			// Ensure the dependency exists next to the main library for @rpath resolution.
+			String local_dep = lib_dir.path_join(dep_resolved.get_file());
+			if (!FileAccess::exists(local_dep)) {
+				DirAccess::copy_absolute(dep_resolved, local_dep);
+			}
+
+			// Pre-load the dependency globally so symbols are available.
+			void *dep_handle = dlopen(dep_resolved.utf8().get_data(), RTLD_NOW | RTLD_GLOBAL);
+			if (!dep_handle) {
+				print_verbose(vformat("GDExtension dependency pre-load failed: %s. Error: %s", dep_resolved, dlerror()));
+			}
+		}
+	}
+
 	p_library_handle = dlopen(path.utf8().get_data(), RTLD_NOW);
 	ERR_FAIL_NULL_V_MSG(p_library_handle, ERR_CANT_OPEN, vformat("Can't open dynamic library: %s. Error: %s.", p_path, dlerror()));
 

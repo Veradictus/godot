@@ -72,11 +72,14 @@ protected:
 			add_shared_object(lib_path, tags);
 		}
 
-		// Bundle steam_appid.txt from the project root next to the executable (desktop only).
-		if (!p_features.has("android") && !p_features.has("ios") && !p_features.has("web") && FileAccess::exists("res://steam_appid.txt")) {
+		// Bundle steam_appid.txt next to the executable (Windows/Linux only).
+		// macOS is excluded because codesign treats everything in the .app bundle as a
+		// code object and a plain text file breaks signing and notarization.
+		// On macOS, steam_appid.txt should be placed next to the .app bundle instead.
+		if (!p_features.has("android") && !p_features.has("ios") && !p_features.has("web") && !p_features.has("macos") && FileAccess::exists("res://steam_appid.txt")) {
 			String appid_path = ProjectSettings::get_singleton()->globalize_path("res://steam_appid.txt");
 			Vector<String> tags;
-			add_shared_object(appid_path, tags, p_features.has("macos") ? macos_target : String());
+			add_shared_object(appid_path, tags, String());
 		}
 	}
 
