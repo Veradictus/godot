@@ -98,7 +98,7 @@ elif env["platform"] == "macos":
 
 env_steam = env.Clone()
 env_steam.disable_warnings()
-env_steam.Append(CPPDEFINES=[('GODOTSTEAM_SDK_PATH', '\\"' + module_path + '/sdk\\"')])
+env_steam.Append(CPPDEFINES=[('GODOTSTEAM_SDK_PATH', '\\"' + module_path.replace('\\', '/') + '/sdk\\"')])
 if embed_steam_dll:
 	env_steam.Append(CPPDEFINES=["STEAM_EMBEDDED_DLL"])
 	env_steam.add_source_files(env.modules_sources, "%s/embedded_steam_dll.gen.cpp" % module_path)
