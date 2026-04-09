@@ -142,14 +142,15 @@ bool _mi_prim_thread_is_in_threadpool(void);
 // Note: we would like to prefer `__builtin_thread_pointer()` nowadays instead of using assembly,
 // but unfortunately we can not detect support reliably (see issue #883)
 // We also use it on Apple OS as we use a TLS slot for the default theap there.
-#if (defined(_WIN32)) || \
+#if !defined(MI_HAS_TLS_SLOT) && ( \
+    (defined(_WIN32)) || \
     (defined(__GNUC__) && ( \
            (defined(__GLIBC__)   && (defined(__x86_64__) || defined(__i386__) || (defined(__arm__) && __ARM_ARCH >= 7) || defined(__aarch64__))) \
         || (defined(__APPLE__)   && (defined(__x86_64__) || defined(__aarch64__) || defined(__POWERPC__))) \
         || (defined(__BIONIC__)  && (defined(__x86_64__) || defined(__i386__) || (defined(__arm__) && __ARM_ARCH >= 7) || defined(__aarch64__))) \
         || (defined(__FreeBSD__) && (defined(__x86_64__) || defined(__i386__) || defined(__aarch64__))) \
         || (defined(__OpenBSD__) && (defined(__x86_64__) || defined(__i386__) || defined(__aarch64__))) \
-      ))
+      )))
 
 static inline void* mi_prim_tls_slot(size_t slot) mi_attr_noexcept {
   void* res;
