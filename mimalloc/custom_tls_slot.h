@@ -33,14 +33,6 @@
 
 #include <stddef.h>
 
-#include "core/object/object.h"
-#include "core/string/ustring.h"
-#include "core/templates/list.h"
-#include "core/templates/pair.h"
-
-class Node;
-class Script;
-
 #define MI_HAS_TLS_SLOT
 #define MI_TLS_SLOT 0
 
