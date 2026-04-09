@@ -33,7 +33,7 @@
 
 #include <stddef.h>
 
-#define MI_HAS_TLS_SLOT
+#define MI_HAS_TLS_SLOT 2
 #define MI_TLS_SLOT 0
 
 #ifdef __cplusplus
