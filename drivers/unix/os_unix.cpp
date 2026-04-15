@@ -797,7 +797,7 @@ Dictionary OS_Unix::execute_with_pipe(const String &p_path, const List<String> &
 
 		execvp(p_path.utf8().get_data(), &args[0]);
 		// The execvp() function only returns if an error occurs.
-		ERR_PRINT("Could not create child process: " + p_path);
+		fprintf(stderr, "Could not create child process: %s\n", p_path.utf8().get_data());
 		raise(SIGKILL);
 	}
 	::close(pipe_in[0]);
@@ -945,6 +945,7 @@ Error OS_Unix::execute(const String &p_path, const List<String> &p_arguments, St
 		// The child process
 		execvp(args[0], &args[0]);
 		// The execvp() function only returns if an error occurs.
+		fprintf(stderr, "Could not create child process: %s\n", p_path.utf8().get_data());
 		raise(SIGKILL);
 	}
 
@@ -983,7 +984,22 @@ Error OS_Unix::create_process(const String &p_path, const List<String> &p_argume
 
 	if (pid == 0) {
 		setsid();
-		execvp(args[0], &args[0]);
+
+		Vector<CharString> cs;
+		cs.push_back(p_path.utf8());
+		for (const String &arg : p_arguments) {
+			cs.push_back(arg.utf8());
+		}
+
+		Vector<char *> args;
+		for (int i = 0; i < cs.size(); i++) {
+			args.push_back((char *)cs[i].get_data());
+		}
+		args.push_back(0);
+
+		execvp(p_path.utf8().get_data(), &args[0]);
+		// The execvp() function only returns if an error occurs.
+		fprintf(stderr, "Could not create child process: %s\n", p_path.utf8().get_data());
 		raise(SIGKILL);
 	}
 #else

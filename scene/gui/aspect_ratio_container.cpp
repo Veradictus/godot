@@ -40,7 +40,7 @@ Size2 AspectRatioContainer::get_minimum_size() const {
 		if (!c) {
 			continue;
 		}
-		Size2 minsize = c->get_combined_minimum_size();
+		Size2 minsize = c->get_bound_minimum_size();
 		ms = ms.max(minsize);
 	}
 	return ms;
@@ -123,7 +123,7 @@ void AspectRatioContainer::_notification(int p_what) {
 					}
 				}
 
-				Size2 child_minsize = c->get_combined_minimum_size();
+				Size2 child_minsize = c->get_bound_minimum_size();
 				Size2 child_size = Size2(ratio, 1.0);
 				float scale_factor = 1.0;
 
