@@ -39,6 +39,7 @@
 #include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
 #include "core/object/script_language.h"
+#include "core/object/worker_thread_pool.h"
 #include "core/os/os.h"
 
 GDExtensionManager::LoadStatus GDExtensionManager::_load_extension_internal(const Ref<GDExtension> &p_extension, bool p_first_load) {
@@ -139,6 +140,13 @@ GDExtensionManager::LoadStatus GDExtensionManager::load_extension_with_loader(co
 	Ref<GDExtension> extension;
 	extension.instantiate();
 	Error err = extension->open_library(p_path, p_loader);
+	if (err == ERR_SKIP) {
+		// The `.gdextension` is valid but ships no library for the current platform. Remember the
+		// config file's mtime so we don't retry (and re-log) on every filesystem scan; retry only
+		// if the developer edits the config.
+		unsupported_extensions[p_path] = FileAccess::get_modified_time(p_path);
+		return LOAD_STATUS_UNSUPPORTED_PLATFORM;
+	}
 	if (err != OK) {
 		return LOAD_STATUS_FAILED;
 	}
@@ -342,35 +350,95 @@ void GDExtensionManager::reload_extensions() {
 	if (Engine::get_singleton()->is_recovery_mode_hint()) {
 		return;
 	}
-	bool reloaded = false;
+	// `has_library_changed()` performs blocking stat (and, for Windows mtime-preserve cases, MD5)
+	// reads. With several addons that used to stall the editor on every focus-in event. Push the
+	// detection to a worker thread and only hand the actually-changed extensions back for reload.
+	if (reload_probe_in_progress.is_set()) {
+		return;
+	}
+
+	reload_probe_snapshot.clear();
 	for (const KeyValue<String, Ref<GDExtension>> &E : gdextension_map) {
-		if (!E.value->is_reloadable()) {
-			continue;
-		}
-
-		if (E.value->has_library_changed()) {
-			reloaded = true;
-			reload_extension(E.value->get_path());
+		if (E.value->is_reloadable()) {
+			reload_probe_snapshot.push_back(E.value);
 		}
 	}
-
-	if (reloaded) {
-		emit_signal("extensions_reloaded");
-
-		// Reload all scripts to clear out old references.
-		callable_mp_static(&GDExtensionManager::_reload_all_scripts).call_deferred();
+	if (reload_probe_snapshot.is_empty()) {
+		return;
 	}
+
+	reload_probe_in_progress.set();
+	WorkerThreadPool::get_singleton()->add_task(
+			callable_mp(this, &GDExtensionManager::_probe_extensions_thread), false, "GDExtensionReloadProbe");
 #endif
 }
+
+#ifdef TOOLS_ENABLED
+void GDExtensionManager::_probe_extensions_thread() {
+	Vector<String> changed;
+	for (const Ref<GDExtension> &ext : reload_probe_snapshot) {
+		if (ext.is_valid() && ext->has_library_changed()) {
+			changed.push_back(ext->get_path());
+		}
+	}
+	reload_probe_changed_paths = changed;
+	reload_probe_snapshot.clear();
+	callable_mp(this, &GDExtensionManager::_finish_extension_reload).call_deferred();
+}
+
+void GDExtensionManager::_finish_extension_reload() {
+	Vector<String> changed = reload_probe_changed_paths;
+	reload_probe_changed_paths.clear();
+	reload_probe_in_progress.clear();
+
+	if (changed.is_empty()) {
+		return;
+	}
+
+	for (const String &path : changed) {
+		if (gdextension_map.has(path)) {
+			reload_extension(path);
+		}
+	}
+
+	emit_signal("extensions_reloaded");
+
+	// Reload all scripts to clear out old references.
+	callable_mp_static(&GDExtensionManager::_reload_all_scripts).call_deferred();
+}
+#endif
 
 bool GDExtensionManager::ensure_extensions_loaded(const HashSet<String> &p_extensions) {
 	Vector<String> extensions_added;
 	Vector<String> extensions_removed;
 
-	for (const String &E : p_extensions) {
-		if (!is_extension_loaded(E)) {
-			extensions_added.push_back(E);
+	// Drop entries from the unsupported cache for paths the filesystem no longer reports, so a
+	// re-added extension gets a fresh load attempt instead of silently staying skipped.
+	if (!unsupported_extensions.is_empty()) {
+		Vector<String> stale_unsupported;
+		for (const KeyValue<String, uint64_t> &E : unsupported_extensions) {
+			if (!p_extensions.has(E.key)) {
+				stale_unsupported.push_back(E.key);
+			}
 		}
+		for (const String &path : stale_unsupported) {
+			unsupported_extensions.erase(path);
+		}
+	}
+
+	for (const String &E : p_extensions) {
+		if (is_extension_loaded(E)) {
+			continue;
+		}
+		HashMap<String, uint64_t>::ConstIterator unsupported = unsupported_extensions.find(E);
+		if (unsupported) {
+			// Only retry if the developer has edited the config since we last skipped it.
+			if (FileAccess::get_modified_time(E) == unsupported->value) {
+				continue;
+			}
+			unsupported_extensions.erase(E);
+		}
+		extensions_added.push_back(E);
 	}
 
 	Vector<String> loaded_extensions = get_loaded_extensions();
@@ -479,6 +547,7 @@ void GDExtensionManager::_bind_methods() {
 	BIND_ENUM_CONSTANT(LOAD_STATUS_ALREADY_LOADED);
 	BIND_ENUM_CONSTANT(LOAD_STATUS_NOT_LOADED);
 	BIND_ENUM_CONSTANT(LOAD_STATUS_NEEDS_RESTART);
+	BIND_ENUM_CONSTANT(LOAD_STATUS_UNSUPPORTED_PLATFORM);
 
 	ADD_SIGNAL(MethodInfo("extensions_reloaded"));
 	ADD_SIGNAL(MethodInfo("extension_loaded", PropertyInfo(Variant::OBJECT, "extension", PROPERTY_HINT_RESOURCE_TYPE, GDExtension::get_class_static())));

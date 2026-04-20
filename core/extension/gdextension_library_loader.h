@@ -58,12 +58,24 @@ private:
 	HashMap<String, String> class_icon_paths;
 
 #ifdef TOOLS_ENABLED
-	uint64_t resource_last_modified_time = 0;
-	uint64_t library_last_modified_time = 0;
+	// Fingerprint of the config + library files captured at load/reload time. `has_library_changed()`
+	// uses size as a cheap primary check, mtime as a secondary hint, and finally an MD5 tiebreak when
+	// size matches but mtime diverges (e.g., "touch" or Windows-style file-copy that rewrites the
+	// timestamp without actually changing bytes). These fields are written on the main thread during
+	// parse/reload and only read by the async probe thread after the main thread has published them.
+	mutable uint64_t resource_last_modified_time = 0;
+	mutable uint64_t library_last_modified_time = 0;
+	mutable int64_t resource_size = -1;
+	mutable int64_t library_size = -1;
+	mutable String library_hash;
 
-	void update_last_modified_time(uint64_t p_resource_last_modified_time, uint64_t p_library_last_modified_time) {
-		resource_last_modified_time = p_resource_last_modified_time;
-		library_last_modified_time = p_library_last_modified_time;
+	void update_library_fingerprint(uint64_t p_resource_mtime, uint64_t p_library_mtime,
+			int64_t p_resource_size, int64_t p_library_size, const String &p_library_hash) {
+		resource_last_modified_time = p_resource_mtime;
+		library_last_modified_time = p_library_mtime;
+		resource_size = p_resource_size;
+		library_size = p_library_size;
+		library_hash = p_library_hash;
 	}
 #endif
 

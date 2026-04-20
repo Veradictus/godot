@@ -31,6 +31,7 @@
 #pragma once
 
 #include "core/extension/gdextension.h"
+#include "core/templates/safe_refcount.h"
 #include "core/variant/native_ptr.h"
 
 GDVIRTUAL_NATIVE_PTR(GDExtensionInitializationFunction)
@@ -41,6 +42,18 @@ class GDExtensionManager : public Object {
 	int32_t level = -1;
 	HashMap<String, Ref<GDExtension>> gdextension_map;
 	HashMap<String, String> gdextension_class_icon_paths;
+
+	// Paths of `.gdextension` files that parsed successfully but don't ship a library for the current
+	// platform. The stored value is the resource file's modified time at the moment we skipped it, so
+	// `ensure_extensions_loaded()` can retry once the developer edits the config (e.g., adds a Windows
+	// entry) without spamming the log on every focus-in scan.
+	HashMap<String, uint64_t> unsupported_extensions;
+
+	// Serializes the async change-detection probe kicked off by `reload_extensions()`. We skip probes
+	// while one is already in flight so rapid alt-tabbing doesn't stack worker tasks.
+	SafeFlag reload_probe_in_progress;
+	Vector<Ref<GDExtension>> reload_probe_snapshot;
+	Vector<String> reload_probe_changed_paths;
 
 	bool startup_callback_called = false;
 	bool shutdown_callback_called = false;
@@ -56,6 +69,7 @@ public:
 		LOAD_STATUS_ALREADY_LOADED,
 		LOAD_STATUS_NOT_LOADED,
 		LOAD_STATUS_NEEDS_RESTART,
+		LOAD_STATUS_UNSUPPORTED_PLATFORM,
 	};
 
 private:
@@ -65,6 +79,14 @@ private:
 
 #ifdef TOOLS_ENABLED
 	static void _reload_all_scripts();
+
+	// Runs on a worker thread: calls `has_library_changed()` on every snapshotted extension.
+	// Pure reads of per-loader fields that are only written during parse/reload on the main thread,
+	// and `reload_probe_in_progress` guards against overlapping reloads triggered from here.
+	void _probe_extensions_thread();
+	// Runs on the main thread after the probe finishes (via `call_deferred`): reloads the subset
+	// of extensions whose library bytes actually changed, then emits signals.
+	void _finish_extension_reload();
 #endif
 
 public:

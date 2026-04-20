@@ -754,6 +754,12 @@ Error GDExtension::open_library(const String &p_path, const Ref<GDExtensionLoade
 
 	Error err = loader->open_library(p_path);
 
+	// ERR_SKIP means the loader intentionally declined (e.g., a `.gdextension` that doesn't
+	// ship a library for the current platform). The loader already logged a verbose note;
+	// propagate silently so the caller can decide what to do without log spam.
+	if (err == ERR_SKIP) {
+		return err;
+	}
 	ERR_FAIL_COND_V_MSG(err == ERR_FILE_NOT_FOUND, err, vformat("GDExtension dynamic library not found: '%s'.", p_path));
 	ERR_FAIL_COND_V_MSG(err != OK, err, vformat("Can't open GDExtension dynamic library: '%s'.", p_path));
 

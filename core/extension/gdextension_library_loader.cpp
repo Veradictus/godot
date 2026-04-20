@@ -250,15 +250,34 @@ bool GDExtensionLibraryLoader::is_library_open() const {
 
 bool GDExtensionLibraryLoader::has_library_changed() const {
 #ifdef TOOLS_ENABLED
-	// Check only that the last modified time is different (rather than checking
-	// that it's newer) since some OS's (namely Windows) will preserve the modified
-	// time by default when copying files.
-	if (FileAccess::get_modified_time(resource_path) != resource_last_modified_time) {
+	// Tiered comparison, cheapest check first. Runs off the main thread; hashing only happens
+	// when size matches but mtime differs (Windows copy-preserves-mtime, `touch`, re-saves of
+	// identical content) — in that case we confirm with MD5 so we don't needlessly reload the
+	// script graph.
+	const int64_t current_resource_size = FileAccess::get_size(resource_path);
+	if (current_resource_size != resource_size) {
 		return true;
 	}
-	if (FileAccess::get_modified_time(library_path) != library_last_modified_time) {
+	const int64_t current_library_size = FileAccess::get_size(library_path);
+	if (current_library_size != library_size) {
 		return true;
 	}
+
+	const uint64_t current_resource_mtime = FileAccess::get_modified_time(resource_path);
+	const uint64_t current_library_mtime = FileAccess::get_modified_time(library_path);
+	if (current_resource_mtime == resource_last_modified_time && current_library_mtime == library_last_modified_time) {
+		return false;
+	}
+
+	// Sizes match, mtimes diverge — hash the library bytes to decide for sure.
+	const String current_library_hash = FileAccess::get_md5(library_path);
+	if (library_hash.is_empty() || current_library_hash != library_hash) {
+		return true;
+	}
+
+	// Bytes unchanged; absorb the mtime drift so we don't re-hash on every probe.
+	resource_last_modified_time = current_resource_mtime;
+	library_last_modified_time = current_library_mtime;
 #endif
 	return false;
 }
@@ -363,6 +382,13 @@ Error GDExtensionLibraryLoader::parse_gdextension_file(const String &p_path) {
 
 	if (library_path.is_empty()) {
 		const String os_arch = OS::get_singleton()->get_name().to_lower() + "." + Engine::get_singleton()->get_architecture_name();
+		// Distinguish "no library entries match this platform" (expected for mobile-only/desktop-only addons
+		// that a developer keeps around while working on another platform) from a genuinely broken config.
+		const bool has_declared_libraries = config->has_section("libraries") && !config->get_section_keys("libraries").is_empty();
+		if (has_declared_libraries) {
+			print_verbose(vformat("GDExtension '%s' has no library entry matching %s; skipping on this platform.", p_path, os_arch));
+			return ERR_SKIP;
+		}
 		ERR_PRINT(vformat("No GDExtension library found for current OS and architecture (%s) in configuration file: %s", os_arch, p_path));
 		return ERR_FILE_NOT_FOUND;
 	}
@@ -374,9 +400,26 @@ Error GDExtensionLibraryLoader::parse_gdextension_file(const String &p_path) {
 #ifdef TOOLS_ENABLED
 	is_reloadable = config->get_value("configuration", "reloadable", false);
 
-	update_last_modified_time(
-			FileAccess::get_modified_time(resource_path),
-			FileAccess::get_modified_time(library_path));
+	// Capture a full fingerprint of the config + library so subsequent probes can do a tiered
+	// comparison (size → mtime → MD5) entirely off-thread. Hashing here is a single read while the
+	// library bytes are already hot from the dynamic-linker load we're about to do, so the cost is
+	// lower than if we deferred it to the first probe.
+	if (is_reloadable) {
+		update_library_fingerprint(
+				FileAccess::get_modified_time(resource_path),
+				FileAccess::get_modified_time(library_path),
+				FileAccess::get_size(resource_path),
+				FileAccess::get_size(library_path),
+				FileAccess::get_md5(library_path));
+	} else {
+		// Non-reloadable extensions never go through `has_library_changed()`, so skip the hash cost.
+		update_library_fingerprint(
+				FileAccess::get_modified_time(resource_path),
+				FileAccess::get_modified_time(library_path),
+				FileAccess::get_size(resource_path),
+				FileAccess::get_size(library_path),
+				String());
+	}
 #endif
 
 	library_dependencies = find_extension_dependencies(p_path, config, [](const String &p_feature) { return OS::get_singleton()->has_feature(p_feature); });
