@@ -81,6 +81,7 @@
 #include "editor/file_system/dependency_editor.h"
 #include "editor/file_system/editor_paths.h"
 #include "editor/gui/editor_about.h"
+#include "editor/gui/editor_background_task_panel.h"
 #include "editor/gui/editor_bottom_panel.h"
 #include "editor/gui/editor_file_dialog.h"
 #include "editor/gui/editor_quick_open_dialog.h"
@@ -5516,7 +5517,13 @@ void EditorNode::notify_all_debug_sessions_exited() {
 }
 
 void EditorNode::add_io_error(const String &p_error) {
-	DEV_ASSERT(Thread::get_caller_id() == Thread::get_main_id());
+	// Off-thread callers (e.g. the background-export worker) must defer — `add_image` / `add_text`
+	// mutate `load_errors` which lives in the scene tree, and popping the dialog calls `add_child`
+	// on `EditorNode` itself. Both are main-thread-only.
+	if (!Thread::is_main_thread()) {
+		callable_mp_static(&EditorNode::add_io_error).call_deferred(p_error);
+		return;
+	}
 	singleton->load_errors->add_image(singleton->theme->get_icon(SNAME("Error"), EditorStringName(EditorIcons)));
 	singleton->load_errors->add_text(p_error + "\n");
 	// When a progress dialog is displayed, we will wait for it ot close before displaying
@@ -5529,7 +5536,10 @@ void EditorNode::add_io_error(const String &p_error) {
 }
 
 void EditorNode::add_io_warning(const String &p_warning) {
-	DEV_ASSERT(Thread::get_caller_id() == Thread::get_main_id());
+	if (!Thread::is_main_thread()) {
+		callable_mp_static(&EditorNode::add_io_warning).call_deferred(p_warning);
+		return;
+	}
 	singleton->load_errors->add_image(singleton->theme->get_icon(SNAME("Warning"), EditorStringName(EditorIcons)));
 	singleton->load_errors->add_text(p_warning + "\n");
 	// When a progress dialog is displayed, we will wait for it ot close before displaying
@@ -5920,7 +5930,16 @@ static double last_progress_time = 0;
 void EditorNode::progress_add_task(const String &p_task, const String &p_label, int p_steps, bool p_can_cancel) {
 	if (!singleton) {
 		return;
-	} else if (singleton->cmdline_mode) {
+	}
+	// Anything off the main thread must not touch the modal `ProgressDialog` (which does
+	// `add_child` + `popup_centered` + pumps `DisplayServer::process_events`). Redirect to the
+	// non-blocking footer panel so worker-thread callers — the off-thread reimport / export
+	// pipelines, or any user-plugin that accidentally reaches here — stay safe.
+	if (!Thread::is_main_thread()) {
+		progress_add_task_bg(p_task, p_label, p_steps);
+		return;
+	}
+	if (singleton->cmdline_mode) {
 		print_line_rich(vformat("[   0%% ] [color=gray][b]%s[/b] | Started %s (%d steps)[/color]", p_task, p_label, p_steps));
 		progress_total_steps[p_task] = p_steps;
 	} else if (singleton->progress_dialog) {
@@ -5931,7 +5950,12 @@ void EditorNode::progress_add_task(const String &p_task, const String &p_label, 
 bool EditorNode::progress_task_step(const String &p_task, const String &p_state, int p_step, bool p_force_refresh) {
 	if (!singleton) {
 		return false;
-	} else if (singleton->cmdline_mode) {
+	}
+	if (!Thread::is_main_thread()) {
+		progress_task_step_bg(p_task, p_step);
+		return false;
+	}
+	if (singleton->cmdline_mode) {
 		double current_time = USEC_TO_SEC(OS::get_singleton()->get_ticks_usec());
 		double elapsed_time = current_time - last_progress_time;
 		if (p_task != last_progress_task || p_state != last_progress_state || p_step != last_progress_step || elapsed_time >= 1.0) {
@@ -5955,7 +5979,12 @@ bool EditorNode::progress_task_step(const String &p_task, const String &p_state,
 void EditorNode::progress_end_task(const String &p_task) {
 	if (!singleton) {
 		return;
-	} else if (singleton->cmdline_mode) {
+	}
+	if (!Thread::is_main_thread()) {
+		progress_end_task_bg(p_task);
+		return;
+	}
+	if (singleton->cmdline_mode) {
 		progress_total_steps.erase(p_task);
 		print_line_rich(vformat("[color=green][ DONE ][/color] [b]%s[/b]\n", p_task));
 	} else if (singleton->progress_dialog) {
@@ -5963,16 +5992,28 @@ void EditorNode::progress_end_task(const String &p_task) {
 	}
 }
 
+// Non-blocking progress routed to `EditorBackgroundTaskPanel`, which lives inside the bottom
+// panel and auto-hides when idle. These calls are safe from any thread — the panel defers all
+// scene-tree work to the main thread internally.
 void EditorNode::progress_add_task_bg(const String &p_task, const String &p_label, int p_steps) {
-	singleton->progress_hb->add_task(p_task, p_label, p_steps);
+	EditorBottomPanel *bp = singleton ? singleton->bottom_panel : nullptr;
+	if (bp && bp->get_background_task_panel()) {
+		bp->get_background_task_panel()->add_task(p_task, p_label, p_steps);
+	}
 }
 
 void EditorNode::progress_task_step_bg(const String &p_task, int p_step) {
-	singleton->progress_hb->task_step(p_task, p_step);
+	EditorBottomPanel *bp = singleton ? singleton->bottom_panel : nullptr;
+	if (bp && bp->get_background_task_panel()) {
+		bp->get_background_task_panel()->task_step(p_task, p_step);
+	}
 }
 
 void EditorNode::progress_end_task_bg(const String &p_task) {
-	singleton->progress_hb->end_task(p_task);
+	EditorBottomPanel *bp = singleton ? singleton->bottom_panel : nullptr;
+	if (bp && bp->get_background_task_panel()) {
+		bp->get_background_task_panel()->end_task(p_task);
+	}
 }
 
 void EditorNode::_progress_dialog_visibility_changed() {
@@ -6211,6 +6252,10 @@ bool EditorNode::is_project_exporting() const {
 }
 
 void EditorNode::show_accept(const String &p_text, const String &p_title) {
+	if (!Thread::is_main_thread()) {
+		callable_mp(this, &EditorNode::show_accept).call_deferred(p_text, p_title);
+		return;
+	}
 	current_menu_option = -1;
 	if (accept) {
 		_close_save_scene_progress();
@@ -6233,6 +6278,10 @@ void EditorNode::show_save_accept(const String &p_text, const String &p_title) {
 }
 
 void EditorNode::show_warning(const String &p_text, const String &p_title) {
+	if (!Thread::is_main_thread()) {
+		callable_mp(this, &EditorNode::show_warning).call_deferred(p_text, p_title);
+		return;
+	}
 	if (warning) {
 		_close_save_scene_progress();
 		warning->set_text(p_text);
@@ -6559,6 +6608,17 @@ void EditorNode::_immediate_dialog_confirmed() {
 	immediate_dialog_confirmed = true;
 }
 bool EditorNode::immediate_confirmation_dialog(const String &p_text, const String &p_ok_text, const String &p_cancel_text, uint32_t p_wrap_width) {
+	// This helper pops a modal dialog and busy-waits by pumping `Main::iteration()`. Both the
+	// `add_child` on `gui_base` and `DisplayServer::process_events()` are hard-gated to the main
+	// thread, so a worker-thread caller (e.g. a scan triggered while export runs off-thread)
+	// used to flood the log with three errors per invocation. When called off-thread we skip
+	// the prompt entirely and default to "cancel" — the caller's responsibility to either
+	// repeat the action on the main thread or assume the safe outcome.
+	if (!Thread::is_main_thread()) {
+		WARN_PRINT(vformat("immediate_confirmation_dialog called off the main thread; defaulting to \"%s\". Prompt: %s", p_cancel_text, p_text));
+		return false;
+	}
+
 	ConfirmationDialog *cd = memnew(ConfirmationDialog);
 	cd->set_text(p_text);
 	cd->set_ok_button_text(p_ok_text);
@@ -9106,7 +9166,9 @@ EditorNode::EditorNode() {
 
 	renderer->set_visible(EDITOR_GET("interface/editor/appearance/show_renderer_selector"));
 
-	progress_hb = memnew(BackgroundProgress);
+	// Background-progress UI lives inside `EditorBottomPanel` (see `EditorBackgroundTaskPanel`).
+	// No standalone instance needed here — the legacy orphan `progress_hb` was never added to the
+	// scene tree so its updates were invisible.
 
 	layout_dialog = memnew(EditorLayoutsDialog);
 	gui_base->add_child(layout_dialog);
@@ -9608,7 +9670,6 @@ EditorNode::~EditorNode() {
 	memdelete(editor_plugins_over);
 	memdelete(editor_plugins_force_over);
 	memdelete(editor_plugins_force_input_forwarding);
-	memdelete(progress_hb);
 	memdelete(project_upgrade_tool);
 	memdelete(editor_dock_manager);
 

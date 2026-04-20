@@ -36,6 +36,7 @@
 #include "editor/docks/editor_dock_manager.h"
 #include "editor/editor_node.h"
 #include "editor/editor_string_names.h"
+#include "editor/gui/editor_background_task_panel.h"
 #include "editor/gui/editor_toaster.h"
 #include "editor/gui/editor_version_button.h"
 #include "editor/scene/editor_scene_tabs.h"
@@ -309,6 +310,12 @@ EditorBottomPanel::EditorBottomPanel() :
 	progress_indicator->set_v_size_flags(SIZE_SHRINK_CENTER);
 	progress_indicator->hide();
 	bottom_hbox->add_child(progress_indicator);
+
+	// General-purpose background task indicator used by `EditorProgressBG` / `EditorNode::progress_*_task_bg`.
+	// Stays hidden while there are no active tasks, so the footer stays clean.
+	background_task_panel = memnew(EditorBackgroundTaskPanel);
+	background_task_panel->set_v_size_flags(SIZE_SHRINK_CENTER);
+	bottom_hbox->add_child(background_task_panel);
 
 	EditorVersionButton *version_btn = memnew(EditorVersionButton(EditorVersionButton::FORMAT_BASIC));
 	// Fade out the version label to be less prominent, but still readable.

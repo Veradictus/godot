@@ -40,93 +40,10 @@
 #include "scene/main/window.h"
 #include "servers/display/display_server.h"
 
-void BackgroundProgress::_add_task(const String &p_task, const String &p_label, int p_steps) {
-	_THREAD_SAFE_METHOD_
-	ERR_FAIL_COND_MSG(tasks.has(p_task), "Task '" + p_task + "' already exists.");
-	BackgroundProgress::Task t;
-	t.hb = memnew(HBoxContainer);
-	Label *l = memnew(Label);
-	l->set_text(p_label + " ");
-	t.hb->add_child(l);
-	t.progress = memnew(ProgressBar);
-	t.progress->set_theme_type_variation("PopupProgressBar");
-	t.progress->set_max(p_steps);
-	t.progress->set_value(p_steps);
-	Control *ec = memnew(Control);
-	ec->set_h_size_flags(SIZE_EXPAND_FILL);
-	ec->set_v_size_flags(SIZE_EXPAND_FILL);
-	t.progress->set_anchors_and_offsets_preset(Control::PRESET_FULL_RECT);
-	ec->add_child(t.progress);
-	ec->set_custom_minimum_size(Size2(80, 5) * EDSCALE);
-	t.hb->add_child(ec);
-
-	add_child(t.hb);
-
-	tasks[p_task] = t;
-}
-
-void BackgroundProgress::_update() {
-	_THREAD_SAFE_METHOD_
-
-	for (const KeyValue<String, int> &E : updates) {
-		if (tasks.has(E.key)) {
-			_task_step(E.key, E.value);
-		}
-	}
-
-	updates.clear();
-}
-
-void BackgroundProgress::_task_step(const String &p_task, int p_step) {
-	_THREAD_SAFE_METHOD_
-
-	ERR_FAIL_COND(!tasks.has(p_task));
-
-	Task &t = tasks[p_task];
-	if (p_step < 0) {
-		t.progress->set_value(t.progress->get_value() + 1);
-	} else {
-		t.progress->set_value(p_step);
-	}
-}
-
-void BackgroundProgress::_end_task(const String &p_task) {
-	_THREAD_SAFE_METHOD_
-
-	ERR_FAIL_COND(!tasks.has(p_task));
-	Task &t = tasks[p_task];
-
-	memdelete(t.hb);
-	tasks.erase(p_task);
-}
-
-void BackgroundProgress::add_task(const String &p_task, const String &p_label, int p_steps) {
-	callable_mp(this, &BackgroundProgress::_add_task).call_deferred(p_task, p_label, p_steps);
-}
-
-void BackgroundProgress::task_step(const String &p_task, int p_step) {
-	//this code is weird, but it prevents deadlock.
-	bool no_updates = true;
-	{
-		_THREAD_SAFE_METHOD_
-		no_updates = updates.is_empty();
-	}
-
-	if (no_updates) {
-		callable_mp(this, &BackgroundProgress::_update).call_deferred();
-	}
-
-	{
-		_THREAD_SAFE_METHOD_
-		updates[p_task] = p_step;
-	}
-}
-
-void BackgroundProgress::end_task(const String &p_task) {
-	callable_mp(this, &BackgroundProgress::_end_task).call_deferred(p_task);
-}
-
-////////////////////////////////////////////////
+// `BackgroundProgress` used to live here but was never actually added to the scene tree, so every
+// call to `EditorProgressBG` updated an invisible widget. It has been replaced by
+// `EditorBackgroundTaskPanel`, hosted by `EditorBottomPanel` and routed through
+// `EditorNode::progress_*_task_bg`.
 
 ProgressDialog *ProgressDialog::singleton = nullptr;
 
@@ -146,6 +63,13 @@ void ProgressDialog::_notification(int p_what) {
 }
 
 void ProgressDialog::_update_ui() {
+	// `DisplayServer::process_events()` and `Main::iteration()` are both main-thread-only. Any
+	// off-thread caller that reaches this (e.g. via a stray `ProgressDialog::task_step()` from a
+	// worker during off-thread export) would flood the log and corrupt rendering. Bail silently
+	// — the worker's EditorProgress has already routed progress to the footer panel in parallel.
+	if (!Thread::is_main_thread()) {
+		return;
+	}
 	// Run main loop for two frames.
 	if (is_inside_tree()) {
 		DisplayServer::get_singleton()->process_events();
@@ -192,6 +116,14 @@ void ProgressDialog::_reparent_and_show() {
 }
 
 void ProgressDialog::add_task(const String &p_task, const String &p_label, int p_steps, bool p_can_cancel) {
+	// Hard guard: this method mutates the scene tree (add_child on `main`, popping the dialog
+	// window, pumping `DisplayServer::process_events()`) which is main-thread-only. Redirect any
+	// off-thread caller to the non-blocking footer panel so we don't flood the log with
+	// thread-safety errors or corrupt rendering during an off-thread export.
+	if (!Thread::is_main_thread()) {
+		EditorNode::progress_add_task_bg(p_task, p_label, p_steps);
+		return;
+	}
 	if (MessageQueue::get_singleton()->is_flushing()) {
 		ERR_PRINT("Do not use progress dialog (task) while flushing the message queue or using call_deferred()!");
 		return;
@@ -228,6 +160,10 @@ void ProgressDialog::add_task(const String &p_task, const String &p_label, int p
 }
 
 bool ProgressDialog::task_step(const String &p_task, const String &p_state, int p_step, bool p_force_redraw) {
+	if (!Thread::is_main_thread()) {
+		EditorNode::progress_task_step_bg(p_task, p_step);
+		return false;
+	}
 	ERR_FAIL_COND_V(!tasks.has(p_task), canceled);
 
 	Task &t = tasks[p_task];
@@ -251,6 +187,10 @@ bool ProgressDialog::task_step(const String &p_task, const String &p_state, int 
 }
 
 void ProgressDialog::end_task(const String &p_task) {
+	if (!Thread::is_main_thread()) {
+		EditorNode::progress_end_task_bg(p_task);
+		return;
+	}
 	ERR_FAIL_COND(!tasks.has(p_task));
 	Task &t = tasks[p_task];
 

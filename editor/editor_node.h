@@ -66,7 +66,9 @@ class Window;
 
 class AudioStreamImportSettingsDialog;
 class AudioStreamPreviewGenerator;
-class BackgroundProgress;
+// `BackgroundProgress` was retired in favor of `EditorBackgroundTaskPanel`, which is hosted inside
+// `EditorBottomPanel` and is actually visible to the user. Its forward-declare is intentionally
+// gone.
 class DependencyErrorDialog;
 class DockSplitContainer;
 class DynamicFontImportSettingsDialog;
@@ -414,7 +416,6 @@ private:
 
 	AudioStreamPreviewGenerator *audio_preview_gen = nullptr;
 	ProgressDialog *progress_dialog = nullptr;
-	BackgroundProgress *progress_hb = nullptr;
 
 	DependencyErrorDialog *dependency_error = nullptr;
 	HashMap<String, HashSet<String>> dependency_errors;

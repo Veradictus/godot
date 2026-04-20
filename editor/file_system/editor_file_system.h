@@ -358,6 +358,14 @@ class EditorFileSystem : public Node {
 
 	void _reimport_thread(uint32_t p_index, ImportThreadData *p_import_data);
 
+	// Phase 2 of the off-thread-imports work. `reimport_files()` is the public entry point; when
+	// it's called from the main thread we dispatch `_reimport_files_body()` to a worker task so
+	// the editor stays responsive. Everything that has to run on the main thread (signal emits,
+	// singleton touches, filesystem cache save) is hopped back via `call_deferred`.
+	void _reimport_files_body(Vector<String> p_files);
+	void _reimport_files_finish(Vector<String> p_reloads);
+	void _deferred_emit_reimporting(Vector<String> p_reloads);
+
 	static ResourceUID::ID _resource_saver_get_resource_id_for_path(const String &p_path, bool p_generate);
 
 	bool _scan_extensions();

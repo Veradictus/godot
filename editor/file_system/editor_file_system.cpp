@@ -3249,22 +3249,38 @@ void EditorFileSystem::reimport_files(const Vector<String> &p_files) {
 	ERR_FAIL_COND_MSG(importing, "Attempted to call reimport_files() recursively, this is not allowed.");
 	importing = true;
 
+	// When invoked from the main thread we dispatch the heavy work to a worker task so the editor
+	// stays interactive. When invoked from an already-worker context (e.g. reentrant importer
+	// flow), run synchronously to preserve expected ordering.
+	if (Thread::is_main_thread()) {
+		Vector<String> files_copy = p_files;
+		WorkerThreadPool::get_singleton()->add_task(
+				callable_mp(this, &EditorFileSystem::_reimport_files_body).bind(files_copy),
+				false, vformat("Reimporting %d asset(s)", p_files.size()));
+	} else {
+		_reimport_files_body(p_files);
+	}
+}
+
+void EditorFileSystem::_reimport_files_body(Vector<String> p_files) {
+	// This method runs on a worker task (or inline on a caller's worker). It must not touch any
+	// main-thread-only singletons directly — all such work is shunted through `call_deferred` in
+	// `_reimport_files_finish()`. The per-file `_reimport_file()` mutations of
+	// `EditorFileSystemDirectory` entries are a pre-existing race with the filesystem dock; the
+	// legacy group-task path had the same shape, so we accept the same guarantees here.
+
+	// Mark this thread as an import thread so nested `ResourceLoader::load()` calls take the
+	// import-aware code paths. The flag is `thread_local`, so this doesn't leak to the main
+	// thread. We clear it at the end of the body for cleanliness (pooled workers get reused).
+	ResourceLoader::set_is_import_thread(true);
+
 	Vector<String> reloads;
 
-	EditorProgress *ep = memnew(EditorProgress("reimport", TTR("(Re)Importing Assets"), p_files.size()));
-
-	// The method reimport_files runs on the main thread, and if VSync is enabled
-	// or Update Continuously is disabled, Main::Iteration takes longer each frame.
-	// Each EditorProgress::step can trigger a redraw, and when there are many files to import,
-	// this could lead to a slow import process, especially when the editor is unfocused.
-	// Temporarily disabling VSync and low_processor_usage_mode while reimporting fixes this.
-	const bool old_low_processor_usage_mode = OS::get_singleton()->is_in_low_processor_usage_mode();
-	const DisplayServerEnums::VSyncMode old_vsync_mode = DisplayServer::get_singleton()->window_get_vsync_mode(DisplayServerEnums::MAIN_WINDOW_ID);
-	OS::get_singleton()->set_low_processor_usage_mode(false);
-	DisplayServer::get_singleton()->window_set_vsync_mode(DisplayServerEnums::VSyncMode::VSYNC_DISABLED);
+	// `force_background = true` routes the progress through `EditorBackgroundTaskPanel` (the
+	// footer pill) regardless of which thread we happen to be on.
+	EditorProgress *ep = memnew(EditorProgress("reimport", TTR("(Re)Importing Assets"), p_files.size(), false, true));
 
 	Vector<ImportFile> reimport_files;
-
 	HashSet<String> groups_to_reimport;
 
 	for (int i = 0; i < p_files.size(); i++) {
@@ -3311,8 +3327,9 @@ void EditorFileSystem::reimport_files(const Vector<String> &p_files) {
 
 	ep->step(TTR("Executing pre-reimport operations..."), 0, true);
 
-	// Emit the resource_reimporting signal for the single file before the actual importation.
-	emit_signal(SNAME("resources_reimporting"), reloads);
+	// Fire `resources_reimporting` on the main thread so UI listeners (Import dock, etc.) can
+	// invalidate cached state safely before we start rewriting `.import` files.
+	callable_mp(this, &EditorFileSystem::_deferred_emit_reimporting).call_deferred(reloads);
 
 #ifdef WEB_ENABLED
 	// On web, busy-wait loops on the main thread block the JavaScript event loop,
@@ -3357,22 +3374,14 @@ void EditorFileSystem::reimport_files(const Vector<String> &p_files) {
 					int item_count = i - from + 1;
 					WorkerThreadPool::GroupID group_task = WorkerThreadPool::get_singleton()->add_template_group_task(this, &EditorFileSystem::_reimport_thread, &tdata, item_count, -1, false, vformat(TTR("Import resources of type: %s"), reimport_files[from].importer));
 
-					int imported_count = 0;
-					while (true) {
-						while (true) {
-							ep->step(reimport_files[imported_count].path.get_file(), from + imported_count, false);
-							if (imported_sem.try_wait()) {
-								imported_count++;
-								break;
-							}
-						}
-						if (imported_count == item_count) {
-							break;
-						}
+					// We're already on a worker thread, so a plain blocking wait is fine — the
+					// main thread paints independently. The old code had to pump `Main::iteration`
+					// from the step callback which is no longer necessary.
+					for (int processed = 0; processed < item_count; processed++) {
+						imported_sem.wait();
+						ep->step(reimport_files[from + processed].path.get_file(), from + processed, false);
 					}
-
 					WorkerThreadPool::get_singleton()->wait_for_group_task_completion(group_task);
-					DEV_ASSERT(!imported_sem.try_wait());
 
 					importer->import_threaded_end();
 				}
@@ -3409,26 +3418,30 @@ void EditorFileSystem::reimport_files(const Vector<String> &p_files) {
 	}
 	ep->step(TTR("Finalizing Asset Import..."), p_files.size());
 
-	ResourceUID::get_singleton()->update_cache(); // After reimporting, update the cache.
-	_save_filesystem_cache();
-
 	memdelete_notnull(ep);
 
+	ResourceLoader::set_is_import_thread(false);
+
+	// Hand off to the main thread for final cache persistence + signal emission + clearing the
+	// `importing` flag.
+	callable_mp(this, &EditorFileSystem::_reimport_files_finish).call_deferred(reloads);
+}
+
+void EditorFileSystem::_deferred_emit_reimporting(Vector<String> p_reloads) {
+	emit_signal(SNAME("resources_reimporting"), p_reloads);
+}
+
+void EditorFileSystem::_reimport_files_finish(Vector<String> p_reloads) {
+	ResourceUID::get_singleton()->update_cache();
+	_save_filesystem_cache();
 	_process_update_pending();
 
-	// Revert to previous values to restore editor settings for VSync and Update Continuously.
-	OS::get_singleton()->set_low_processor_usage_mode(old_low_processor_usage_mode);
-	DisplayServer::get_singleton()->window_set_vsync_mode(old_vsync_mode);
-
-	importing = false;
-
-	ep = memnew(EditorProgress("reimport", TTR("(Re)Importing Assets"), p_files.size()));
-	ep->step(TTR("Executing post-reimport operations..."), 0, true);
 	if (!is_scanning()) {
 		emit_signal(SNAME("filesystem_changed"));
 	}
-	emit_signal(SNAME("resources_reimported"), reloads);
-	memdelete_notnull(ep);
+	emit_signal(SNAME("resources_reimported"), p_reloads);
+
+	importing = false;
 }
 
 Error EditorFileSystem::reimport_append(const String &p_file, const HashMap<StringName, Variant> &p_custom_options, const String &p_custom_importer, Variant p_generator_parameters) {

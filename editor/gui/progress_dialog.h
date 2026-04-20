@@ -36,31 +36,6 @@
 #include "scene/gui/label.h"
 #include "scene/gui/progress_bar.h"
 
-class BackgroundProgress : public HBoxContainer {
-	GDCLASS(BackgroundProgress, HBoxContainer);
-
-	_THREAD_SAFE_CLASS_
-
-	struct Task {
-		HBoxContainer *hb = nullptr;
-		ProgressBar *progress = nullptr;
-	};
-
-	HashMap<String, Task> tasks;
-	HashMap<String, int> updates;
-	void _update();
-
-protected:
-	void _add_task(const String &p_task, const String &p_label, int p_steps);
-	void _task_step(const String &p_task, int p_step = -1);
-	void _end_task(const String &p_task);
-
-public:
-	void add_task(const String &p_task, const String &p_label, int p_steps);
-	void task_step(const String &p_task, int p_step = -1);
-	void end_task(const String &p_task);
-};
-
 class PanelContainer;
 
 class ProgressDialog : public CenterContainer {

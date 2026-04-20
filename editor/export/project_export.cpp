@@ -31,7 +31,10 @@
 #include "project_export.h"
 
 #include "core/config/project_settings.h"
+#include "core/io/resource_loader.h"
 #include "core/object/callable_mp.h"
+#include "core/object/worker_thread_pool.h"
+#include "core/os/thread_safe.h"
 #include "core/object/class_db.h"
 #include "core/os/os.h"
 #include "core/version.h"
@@ -39,7 +42,10 @@
 #include "editor/editor_string_names.h"
 #include "editor/export/editor_export.h"
 #include "editor/file_system/editor_file_system.h"
+#include "editor/gui/editor_background_task_panel.h"
+#include "editor/gui/editor_bottom_panel.h"
 #include "editor/gui/editor_file_dialog.h"
+#include "editor/gui/editor_toaster.h"
 #include "editor/import/resource_importer_texture_settings.h"
 #include "editor/inspector/editor_properties.h"
 #include "editor/settings/editor_settings.h"
@@ -1385,21 +1391,22 @@ void ProjectExportDialog::_export_pck_zip_selected(const String &p_path) {
 	EditorSettings::get_singleton()->set_project_metadata("export_options", "export_debug", export_debug);
 	EditorSettings::get_singleton()->set_project_metadata("export_options", "export_as_patch", export_as_patch);
 
+	Ref<ExportJob> job;
+	job.instantiate();
+	job->platform = platform;
+	job->preset = current;
+	job->debug = export_debug;
 	if (p_path.ends_with(".zip")) {
-		if (export_as_patch) {
-			platform->export_zip_patch(current, export_debug, p_path);
-		} else {
-			platform->export_zip(current, export_debug, p_path);
-		}
+		job->kind = export_as_patch ? EXPORT_JOB_ZIP_PATCH : EXPORT_JOB_ZIP;
 	} else if (p_path.ends_with(".pck")) {
-		if (export_as_patch) {
-			platform->export_pack_patch(current, export_debug, p_path);
-		} else {
-			platform->export_pack(current, export_debug, p_path);
-		}
+		job->kind = export_as_patch ? EXPORT_JOB_PACK_PATCH : EXPORT_JOB_PACK;
 	} else {
 		ERR_FAIL_MSG("Path must end with .pck or .zip");
 	}
+	job->path = p_path;
+	job->task_id = "export_pack_" + p_path;
+	job->label = vformat(TTR("Exporting %s"), p_path.get_file());
+	_enqueue_export_job(job);
 }
 
 void ProjectExportDialog::_open_export_template_manager() {
@@ -1450,24 +1457,20 @@ void ProjectExportDialog::_export_project_to_path(const String &p_path) {
 	ERR_FAIL_COND_MSG(platform.is_null(), "Failed to start the export: current preset has no valid platform.");
 	current->set_export_path(p_path);
 
-	exporting = true;
-
-	platform->clear_messages();
-	current->update_value_overrides();
 	Dictionary fd_option = export_project->get_selected_options();
 	bool export_debug = fd_option.get(TTR("Export With Debug"), true);
-
 	EditorSettings::get_singleton()->set_project_metadata("export_options", "export_debug", export_debug);
 
-	Error err = platform->export_project(current, export_debug, current->get_export_path(), 0);
-	result_dialog_log->clear();
-	if (err != ERR_SKIP) {
-		if (platform->fill_log_messages(result_dialog_log, err)) {
-			result_dialog->popup_centered_ratio(0.5);
-		}
-	}
-
-	exporting = false;
+	Ref<ExportJob> job;
+	job.instantiate();
+	job->platform = platform;
+	job->preset = current;
+	job->kind = EXPORT_JOB_PROJECT;
+	job->path = current->get_export_path();
+	job->debug = export_debug;
+	job->task_id = "export_project_" + current->get_name();
+	job->label = vformat(TTR("Exporting %s"), p_path.get_file());
+	_enqueue_export_job(job);
 }
 
 void ProjectExportDialog::_export_all_dialog() {
@@ -1482,46 +1485,189 @@ void ProjectExportDialog::_export_all_dialog_action(const String &p_str) {
 }
 
 void ProjectExportDialog::_export_all(bool p_debug) {
-	exporting = true;
-	bool show_dialog = false;
+	// Build one job per preset and hand off to the unified dispatcher. Each preset appears as a
+	// dim "waiting" row in the footer popup immediately and promotes to an active progress row
+	// when the serial dispatcher starts it.
+	for (int i = 0; i < EditorExport::get_singleton()->get_export_preset_count(); i++) {
+		Ref<EditorExportPreset> preset = EditorExport::get_singleton()->get_export_preset(i);
+		ERR_FAIL_COND_MSG(preset.is_null(), "Failed to start the export: one of the presets is invalid.");
+		Ref<EditorExportPlatform> platform = preset->get_platform();
+		ERR_FAIL_COND_MSG(platform.is_null(), "Failed to start the export: one of the presets has no valid platform.");
 
-	{ // Scope for the editor progress, we must free it before showing the dialog at the end.
-		String export_target = p_debug ? TTR("Debug") : TTR("Release");
-		EditorProgress ep("exportall", TTR("Exporting All") + " " + export_target, EditorExport::get_singleton()->get_export_preset_count(), true);
+		Ref<ExportJob> job;
+		job.instantiate();
+		job->platform = platform;
+		job->preset = preset;
+		job->kind = EXPORT_JOB_PROJECT;
+		job->path = preset->get_export_path();
+		job->debug = p_debug;
+		job->task_id = "export_all_" + itos(i) + "_" + preset->get_name();
+		job->label = vformat(TTR("Exporting %s"), preset->get_name());
+		_enqueue_export_job(job);
+	}
+}
 
+// --- Unified export job queue ---------------------------------------------------------------
+
+void ProjectExportDialog::_enqueue_export_job(Ref<ExportJob> p_job) {
+	ERR_FAIL_COND(p_job.is_null());
+	const bool was_idle = pending_export_jobs.is_empty() && active_export_job.is_null();
+	pending_export_jobs.push_back(p_job);
+
+	// Surface the queued job to the user before dispatch. `EditorBackgroundTaskPanel` shows
+	// queued entries as dim "— waiting" rows in the popup; they promote to a progress bar when
+	// dispatch picks them up. The pill label reflects the running job.
+	EditorNode *en = EditorNode::get_singleton();
+	EditorBackgroundTaskPanel *panel = en ? en->get_bottom_panel()->get_background_task_panel() : nullptr;
+	if (panel) {
+		panel->add_queued_task(p_job->task_id, p_job->label);
+	}
+
+	if (was_idle) {
+		// Fresh batch — clear previous log so any detail-view UI that still reads from it starts
+		// from zero. Per-job toasts are surfaced as each one finishes.
 		result_dialog_log->clear();
-		for (int i = 0; i < EditorExport::get_singleton()->get_export_preset_count(); i++) {
-			Ref<EditorExportPreset> preset = EditorExport::get_singleton()->get_export_preset(i);
-			if (preset.is_null()) {
-				exporting = false;
-				ERR_FAIL_MSG("Failed to start the export: one of the presets is invalid.");
-			}
+	}
+	exporting = true;
+	_dispatch_export_queue();
+}
 
-			Ref<EditorExportPlatform> platform = preset->get_platform();
-			if (platform.is_null()) {
-				exporting = false;
-				ERR_FAIL_MSG("Failed to start the export: one of the presets has no valid platform.");
-			}
+void ProjectExportDialog::_dispatch_export_queue() {
+	// Strict one-at-a-time. `EditorExportPlugin` instances are global across platforms and not
+	// thread-safe; concurrent exports corrupt shared plugin state and crash.
+	if (active_export_job.is_valid()) {
+		return; // An export is in flight; finish callback will pump us.
+	}
+	if (pending_export_jobs.is_empty()) {
+		return;
+	}
 
-			ep.step(preset->get_name(), i);
+	Ref<ExportJob> job = pending_export_jobs.front()->get();
+	pending_export_jobs.pop_front();
+	active_export_job = job;
 
-			platform->clear_messages();
-			preset->update_value_overrides();
-			Error err = platform->export_project(preset, p_debug, preset->get_export_path(), 0);
-			if (err == ERR_SKIP) {
-				exporting = false;
-				return;
+	// Main-thread preflight before handing off to the worker.
+	job->platform->clear_messages();
+	job->preset->update_value_overrides();
+
+	EditorNode *en = EditorNode::get_singleton();
+	EditorBackgroundTaskPanel *panel = en ? en->get_bottom_panel()->get_background_task_panel() : nullptr;
+	if (panel) {
+		// Steps are fuzzy for this wrapping row — the exporter's own nested
+		// `EditorProgress("savepack", …)` renders fine-grained per-file progress under a
+		// separate task id. This row just keeps the preset visible as "running".
+		panel->promote_queued_task(job->task_id, 100);
+	}
+
+	WorkerThreadPool::get_singleton()->add_task(
+			callable_mp(this, &ProjectExportDialog::_run_export_job_thread).bind(job),
+			false, job->label);
+}
+
+void ProjectExportDialog::_run_export_job_thread(Ref<ExportJob> p_job) {
+	// Node-guarded reads inside the exporter (EditorFileSystem walks, preset inspection, etc.)
+	// would trip `ERR_THREAD_GUARD` on a plain worker. Marking this thread as "safe for nodes"
+	// bypasses those — the flag is `thread_local` so it doesn't leak to main or other workers.
+	// Trade-off: user edits to scenes mid-export could feed stale data into the PCK. The
+	// pre-refactor modal dialog avoided this by blocking the UI; we take responsiveness over the
+	// safety net.
+	set_current_thread_safe_for_nodes(true);
+	ResourceLoader::set_is_import_thread(true);
+
+	Error err = OK;
+	switch (p_job->kind) {
+		case EXPORT_JOB_PROJECT:
+			err = p_job->platform->export_project(p_job->preset, p_job->debug, p_job->path, 0);
+			break;
+		case EXPORT_JOB_PACK:
+			err = p_job->platform->export_pack(p_job->preset, p_job->debug, p_job->path);
+			break;
+		case EXPORT_JOB_PACK_PATCH:
+			err = p_job->platform->export_pack_patch(p_job->preset, p_job->debug, p_job->path);
+			break;
+		case EXPORT_JOB_ZIP:
+			err = p_job->platform->export_zip(p_job->preset, p_job->debug, p_job->path);
+			break;
+		case EXPORT_JOB_ZIP_PATCH:
+			err = p_job->platform->export_zip_patch(p_job->preset, p_job->debug, p_job->path);
+			break;
+	}
+
+	ResourceLoader::set_is_import_thread(false);
+	set_current_thread_safe_for_nodes(false);
+
+	callable_mp(this, &ProjectExportDialog::_export_job_finished).bind(p_job, err).call_deferred();
+}
+
+void ProjectExportDialog::_export_job_finished(Ref<ExportJob> p_job, Error p_err) {
+	ERR_FAIL_COND(p_job.is_null());
+	active_export_job = Ref<ExportJob>();
+
+	EditorNode *en = EditorNode::get_singleton();
+	EditorBackgroundTaskPanel *panel = en ? en->get_bottom_panel()->get_background_task_panel() : nullptr;
+	if (panel) {
+		panel->end_task(p_job->task_id);
+	}
+
+	// Toast the result per-job. Success → info (green check), warnings → warning, failure →
+	// error. The toaster lives in the bottom bar and auto-dismisses; no more modal popup
+	// interrupting the user's flow.
+	EditorToaster *toaster = EditorToaster::get_singleton();
+	if (p_err == OK) {
+		// Count warnings so the toast can report "X warnings" instead of a generic label.
+		// Most exports have at least one warning (codesign identity, icon sizes, etc.) and the
+		// user explicitly asked for the success-with-count framing rather than a separate
+		// "completed with warnings" state.
+		int warning_count = 0;
+		const int msg_count = p_job->platform->get_message_count();
+		for (int i = 0; i < msg_count; i++) {
+			if (p_job->platform->get_message(i).msg_type == EditorExportPlatform::EXPORT_MESSAGE_WARNING) {
+				warning_count++;
 			}
-			bool has_messages = platform->fill_log_messages(result_dialog_log, err);
-			show_dialog = show_dialog || has_messages;
+		}
+		// Fold messages into the result log so a future "show details" action has something to
+		// chew on, then surface via toast as the primary feedback.
+		p_job->platform->fill_log_messages(result_dialog_log, p_err);
+		if (toaster) {
+			String label;
+			if (warning_count > 0) {
+				label = vformat(TTRN("Export successful: %s (%d warning)", "Export successful: %s (%d warnings)", warning_count), p_job->label, warning_count);
+			} else {
+				label = vformat(TTR("Export successful: %s"), p_job->label);
+			}
+			// Keep the severity at INFO (green check) even with warnings — the build is
+			// usable and the user doesn't need a yellow icon yelling at them about minor
+			// codesign/icon notes.
+			toaster->popup_str(label, EditorToaster::SEVERITY_INFO);
+		}
+	} else if (p_err == ERR_SKIP) {
+		// User cancelled this job. Drop the rest of the queue with it — Export All semantics
+		// match the old behavior where a cancelled preset stops the batch.
+		for (List<Ref<ExportJob>>::Element *E = pending_export_jobs.front(); E; E = E->next()) {
+			if (panel) {
+				panel->end_task(E->get()->task_id);
+			}
+		}
+		pending_export_jobs.clear();
+		if (toaster) {
+			toaster->popup_str(vformat(TTR("Export cancelled: %s"), p_job->label), EditorToaster::SEVERITY_INFO);
+		}
+	} else {
+		// Real failure. Still populate the log so "Show Details" semantics (if we add that later)
+		// have something to chew on, and toast the error.
+		p_job->platform->fill_log_messages(result_dialog_log, p_err);
+		if (toaster) {
+			toaster->popup_str(vformat(TTR("Export failed: %s"), p_job->label), EditorToaster::SEVERITY_ERROR);
 		}
 	}
 
-	if (show_dialog) {
-		result_dialog->popup_centered_ratio(0.5);
-	}
+	// Drain the next job.
+	_dispatch_export_queue();
 
-	exporting = false;
+	// End-of-batch: no jobs pending, none in flight.
+	if (pending_export_jobs.is_empty() && active_export_job.is_null()) {
+		exporting = false;
+	}
 }
 
 void ProjectExportDialog::_bind_methods() {

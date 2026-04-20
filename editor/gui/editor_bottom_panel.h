@@ -35,6 +35,7 @@
 
 class Button;
 class ConfigFile;
+class EditorBackgroundTaskPanel;
 class EditorDock;
 class EditorToaster;
 class HBoxContainer;
@@ -58,6 +59,7 @@ class EditorBottomPanel : public DockTabContainer {
 	HBoxContainer *bottom_hbox = nullptr;
 	EditorToaster *editor_toaster = nullptr;
 	ProgressIndicator *progress_indicator = nullptr;
+	EditorBackgroundTaskPanel *background_task_panel = nullptr;
 	Button *pin_button = nullptr;
 	Button *expand_button = nullptr;
 
@@ -101,6 +103,7 @@ public:
 	bool is_locked() const { return lock_panel_switching; }
 
 	ProgressIndicator *get_progress_indicator() { return progress_indicator; }
+	EditorBackgroundTaskPanel *get_background_task_panel() { return background_task_panel; }
 
 	void set_bottom_panel_offset(int p_offset);
 	int get_bottom_panel_offset();

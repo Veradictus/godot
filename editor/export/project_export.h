@@ -30,6 +30,8 @@
 
 #pragma once
 
+#include "core/object/ref_counted.h"
+#include "core/templates/list.h"
 #include "core/templates/rb_set.h"
 #include "editor/export/editor_export_preset.h"
 #include "scene/gui/dialogs.h"
@@ -206,6 +208,47 @@ class ProjectExportDialog : public ConfirmationDialog {
 	void _export_all_dialog();
 	void _export_all_dialog_action(const String &p_str);
 	void _export_all(bool p_debug);
+
+	// Phase 3 of the off-thread editor-ops work. All three user-facing export entry points
+	// (single project export, PCK/zip export, Export All) funnel into one job queue so the
+	// `EditorBackgroundTaskPanel` in the footer can show pending work as queued rows before it
+	// starts, then promote each one to a running progress bar as the dispatcher picks it up.
+	//
+	// Dispatch is serial — one export in flight at a time. Tempting as parallel-by-platform is,
+	// `EditorExportPlugin` instances are *global* across platforms (returned by
+	// `EditorExport::get_export_plugins()`) and mutate per-plugin state (`ExtraFile`, message
+	// vectors, etc.) during every export. Concurrent exports crash with out-of-bounds reads on
+	// shared plugin state. Revisit once plugins are made thread-safe.
+	enum ExportJobKind {
+		EXPORT_JOB_PROJECT, // platform->export_project()
+		EXPORT_JOB_PACK, // platform->export_pack()
+		EXPORT_JOB_PACK_PATCH, // platform->export_pack_patch()
+		EXPORT_JOB_ZIP, // platform->export_zip()
+		EXPORT_JOB_ZIP_PATCH, // platform->export_zip_patch()
+	};
+	// `RefCounted` so `Ref<ExportJob>` is Variant-compatible — required for passing the job
+	// through `callable_mp(...).bind(...)` into the worker pool.
+	class ExportJob : public RefCounted {
+		GDSOFTCLASS(ExportJob, RefCounted);
+
+	public:
+		Ref<EditorExportPlatform> platform;
+		Ref<EditorExportPreset> preset;
+		ExportJobKind kind = EXPORT_JOB_PROJECT;
+		String path;
+		bool debug = true;
+		// Identifier for the panel row and the export-progress task id.
+		String task_id;
+		String label;
+	};
+
+	List<Ref<ExportJob>> pending_export_jobs;
+	Ref<ExportJob> active_export_job;
+
+	void _enqueue_export_job(Ref<ExportJob> p_job);
+	void _dispatch_export_queue();
+	void _run_export_job_thread(Ref<ExportJob> p_job);
+	void _export_job_finished(Ref<ExportJob> p_job, Error p_err);
 
 	void _update_feature_list();
 	void _custom_features_changed(const String &p_text);
