@@ -427,6 +427,7 @@ private:
 	EditorDockManager *editor_dock_manager = nullptr;
 	Timer *editor_layout_save_delay_timer = nullptr;
 	Timer *scan_changes_timer = nullptr;
+	class ClaudeReloadServer *claude_reload_server = nullptr;
 	Button *distraction_free = nullptr;
 	Callable palette_file_selected_callback;
 

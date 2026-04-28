@@ -52,6 +52,7 @@
 #include "editor/asset_library/asset_library_editor_plugin.h"
 #include "editor/audio/audio_stream_preview.h"
 #include "editor/audio/editor_audio_buses.h"
+#include "editor/claude_reload_server.h"
 #include "editor/debugger/debugger_editor_plugin.h"
 #include "editor/debugger/editor_debugger_node.h"
 #include "editor/debugger/script_editor_debugger.h"
@@ -8855,6 +8856,12 @@ EditorNode::EditorNode() {
 	scan_changes_timer->connect("timeout", callable_mp(EditorFileSystem::get_singleton(), &EditorFileSystem::scan_changes));
 	add_child(scan_changes_timer);
 
+	// Local loopback endpoint for external editors (Claude Code, MCP, custom
+	// file watchers) to trigger the same rescan + live-script push that
+	// happens on editor focus-in, without actually having to focus the editor.
+	claude_reload_server = memnew(ClaudeReloadServer);
+	claude_reload_server->start();
+
 	top_split = memnew(VSplitContainer);
 	center_split->add_child(top_split);
 	top_split->set_v_size_flags(Control::SIZE_EXPAND_FILL);
@@ -9666,6 +9673,11 @@ EditorNode::~EditorNode() {
 #if defined(MODULE_GDSCRIPT_ENABLED) || defined(MODULE_MONO_ENABLED)
 	EditorHelpHighlighter::free_singleton();
 #endif
+	if (claude_reload_server) {
+		memdelete(claude_reload_server);
+		claude_reload_server = nullptr;
+	}
+
 	memdelete(editor_selection);
 	memdelete(editor_plugins_over);
 	memdelete(editor_plugins_force_over);

@@ -1146,6 +1146,15 @@ void EditorSettings::_load_defaults(Ref<ConfigFile> p_extra_config) {
 	EDITOR_SETTING_BASIC(Variant::BOOL, PROPERTY_HINT_NONE, "network/language_server/use_thread", false, String());
 	EDITOR_SETTING(Variant::INT, PROPERTY_HINT_NONE, "network/language_server/poll_limit_usec", 100000, "");
 
+	/* Claude / external-editor reload bridge */
+	// Loopback HTTP endpoint that external tools (Claude Code, MCP, file watchers)
+	// can hit to force an EditorFileSystem rescan and live script push to the
+	// running game, without relying on the editor regaining focus.
+	_initial_set("network/claude_reload/enabled", true, true);
+	EDITOR_SETTING(Variant::INT, PROPERTY_HINT_RANGE, "network/claude_reload/port", 9678, "1,65535,1");
+	// Auto-generated on first start if empty; required in X-Claude-Token header.
+	EDITOR_SETTING(Variant::STRING, PROPERTY_HINT_PASSWORD, "network/claude_reload/auth_token", "", "");
+
 	/* Debugger/profiler */
 
 	EDITOR_SETTING_BASIC(Variant::BOOL, PROPERTY_HINT_NONE, "debugger/auto_switch_to_remote_scene_tree", false, "")
