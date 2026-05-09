@@ -39,6 +39,7 @@ class Container : public Control {
 	bool accessibility_region = false;
 	void _sort_children();
 	void _child_minsize_changed();
+	void _child_desired_size_changed();
 
 	// Cycle detection to prevent infinite sort loops.
 	uint64_t last_sort_frame = 0;

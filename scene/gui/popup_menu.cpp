@@ -397,15 +397,16 @@ void PopupMenu::_activate_submenu(int p_over, bool p_by_keyboard) {
 
 	panel_offset_start = Point2(panel->get_offset(SIDE_LEFT), panel->get_offset(SIDE_TOP)) * win_scale;
 	const Point2 panel_offset_end = Point2(-panel->get_offset(SIDE_RIGHT), -panel->get_offset(SIDE_BOTTOM)) * win_scale;
-	const Vector2 scaled_this_size = this_rect.size * win_scale;
-	const float scaled_theme_v_separation = theme_cache.v_separation * win_scale;
-	const float scroll_offset = control->get_position().y;
-	const float scaled_ofs_cache = items[p_over]._ofs_cache * win_scale;
-	const float scaled_height_cache = items[p_over]._height_cache * win_scale;
+	const Vector2 this_size = this_rect.size * win_scale;
+	const float theme_v_separation = theme_cache.v_separation * win_scale;
+	const float scroll_offset = control->get_position().y * win_scale;
+	const float scroll_container_offset = scroll_container->get_global_position().y * win_scale;
+	const float ofs_cache = items[p_over]._ofs_cache * win_scale;
+	const float height_cache = items[p_over]._height_cache * win_scale;
 
 	if (is_layout_rtl()) {
 		is_active_submenu_left = true;
-		submenu_pos += this_pos + Point2(-submenu_size.width + panel_offset_end.x, scaled_ofs_cache + scroll_offset - int(scaled_theme_v_separation * 0.5) + panel_offset_start.y);
+		submenu_pos += this_pos + Point2(-submenu_size.width + panel_offset_end.x, ofs_cache + scroll_offset - int(theme_v_separation * 0.5) + scroll_container_offset);
 		if (submenu_pos.x < screen_rect.position.x) {
 			submenu_pos.x = this_pos.x + this_rect.size.width - panel_offset_start.x;
 			is_active_submenu_left = false;
@@ -413,7 +414,7 @@ void PopupMenu::_activate_submenu(int p_over, bool p_by_keyboard) {
 
 	} else {
 		is_active_submenu_left = false;
-		submenu_pos += this_pos + Point2(scaled_this_size.x + panel_offset_start.x, scaled_ofs_cache + scroll_offset - int(scaled_theme_v_separation * 0.5) + panel_offset_start.y);
+		submenu_pos += this_pos + Point2(this_size.x + panel_offset_start.x, ofs_cache + scroll_offset - int(theme_v_separation * 0.5) + scroll_container_offset);
 		if (submenu_pos.x + submenu_size.width > screen_rect.position.x + screen_rect.size.width) {
 			submenu_pos.x = this_pos.x - submenu_size.width + panel_offset_end.x;
 			is_active_submenu_left = true;
@@ -453,15 +454,15 @@ void PopupMenu::_activate_submenu(int p_over, bool p_by_keyboard) {
 	submenu_popup->clear_autohide_areas();
 	// Add an autohide area above the submenu item unless it's the top item.
 	// This avoids a narrow strip of area that can trigger the submenu to reload when reentering the parent item from the top.
-	const int y_to_item_top = scaled_ofs_cache + scroll_offset - int(scaled_theme_v_separation * 0.5) + theme_cache.panel_style->get_margin(SIDE_TOP) * win_scale;
-	Rect2 top_rect = Rect2(this_rect.position.x, this_rect.position.y, scaled_this_size.width, y_to_item_top);
+	const int y_to_item_top = ofs_cache + scroll_offset - int(theme_v_separation * 0.5) + theme_cache.panel_style->get_margin(SIDE_TOP) * win_scale;
+	Rect2 top_rect = Rect2(this_rect.position.x, this_rect.position.y, this_size.width, y_to_item_top);
 	if (active_submenu_index != 0) {
 		submenu_popup->add_autohide_area(top_rect);
 	}
 	// If there is an area below the submenu item, add an autohide area there unless it's the last item.
 	if (active_submenu_index != items.size() - 1) {
-		const int y_to_item_bottom = y_to_item_top + scaled_height_cache + scaled_theme_v_separation;
-		submenu_popup->add_autohide_area(Rect2(this_rect.position.x, this_rect.position.y + y_to_item_bottom, scaled_this_size.x, scaled_this_size.y - y_to_item_bottom));
+		const int y_to_item_bottom = y_to_item_top + height_cache + theme_v_separation;
+		submenu_popup->add_autohide_area(Rect2(this_rect.position.x, this_rect.position.y + y_to_item_bottom, this_size.x, this_size.y - y_to_item_bottom));
 	}
 	queue_accessibility_update();
 	control->queue_redraw();
@@ -915,13 +916,15 @@ void PopupMenu::_draw_items() {
 	Point2 ofs;
 
 	// Loop through all items and draw each.
+	bool first_visible = true;
 	for (int i = 0; i < items.size(); i++) {
 		if (!items[i].visible) {
 			continue;
 		}
 
-		// For the first item only add half a separation. For all other items, add a whole separation to the offset.
-		ofs.y += i > 0 ? theme_cache.v_separation : theme_cache.v_separation / 2;
+		// For the first visible item only add half a separation. For all other items, add a whole separation to the offset.
+		ofs.y += first_visible ? theme_cache.v_separation / 2 : theme_cache.v_separation;
+		first_visible = false;
 
 		_shape_item(i);
 
@@ -1097,35 +1100,58 @@ void PopupMenu::_search_bar_text_changed(const String &p_new_text) {
 }
 
 void PopupMenu::_filter_items(const String &p_query) {
-	PackedStringArray search_names;
-	for (int i = 0; i < items.size(); i++) {
-		search_names.append(items[i].text);
-	}
-
-	Vector<FuzzySearchResult> results;
-	FuzzySearch fuzzy;
-	fuzzy.set_query(p_query, false);
-	fuzzy.search_all(search_names, results);
-
 	for (PopupMenu::Item &item : items) {
-		bool submenu_visible = false;
 		if (item.submenu) {
 			item.submenu->_filter_items(p_query);
-			for (PopupMenu::Item &submenu_item : item.submenu->items) {
+		}
+	}
+
+	for (PopupMenu::Item &item : items) {
+		item.visible = true;
+	}
+
+	if (p_query.is_empty()) {
+		return;
+	}
+
+	PackedStringArray search_candidates;
+	search_candidates.reserve(items.size());
+
+	Vector<int> search_candidate_to_item;
+	search_candidate_to_item.reserve(items.size());
+
+	for (int i = 0; i < items.size(); i++) {
+		Item &item = items.write[i];
+		item.visible = false;
+
+		if (item.submenu) {
+			for (const PopupMenu::Item &submenu_item : item.submenu->items) {
 				if (submenu_item.visible) {
-					submenu_visible = true;
+					item.visible = true;
 					break;
 				}
 			}
 		}
 
-		item.visible = p_query.length() == 0 || submenu_visible;
+		if (!item.separator) {
+			search_candidates.append(item.text);
+			search_candidate_to_item.append(i);
+		}
 	}
 
-	for (const FuzzySearchResult &res : results) {
-		items.write[res.original_index].visible = res.score > 0;
-		if (items[res.original_index].visible && items[res.original_index].submenu) {
-			for (PopupMenu::Item &submenu_item : items[res.original_index].submenu->items) {
+	Vector<FuzzySearchResult> results;
+	FuzzySearch fuzzy;
+	fuzzy.max_results = search_candidates.size();
+	fuzzy.max_misses = search_bar_fuzzy_search_max_misses;
+	fuzzy.allow_subsequences = search_bar_fuzzy_search_enabled;
+	fuzzy.set_query(p_query, false);
+	fuzzy.search_all(search_candidates, results);
+
+	for (const FuzzySearchResult &result : results) {
+		PopupMenu::Item &item = items.write[search_candidate_to_item[result.original_index]];
+		item.visible = true;
+		if (item.submenu) {
+			for (PopupMenu::Item &submenu_item : item.submenu->items) {
 				submenu_item.visible = true;
 			}
 		}
@@ -1518,7 +1544,7 @@ void PopupMenu::_notification(int p_what) {
 						if (!match_found) {
 							// If the last item is not selectable, try re-searching from the start.
 							for (int i = 0; i < search_from; i++) {
-								if (!items[i].separator && !items[i].disabled) {
+								if (!items[i].separator && !items[i].disabled && items[i].visible) {
 									mouse_over = i;
 									emit_signal(SNAME("id_focused"), items[i].id);
 									scroll_to_item(i);
@@ -1538,7 +1564,7 @@ void PopupMenu::_notification(int p_what) {
 
 						bool match_found = false;
 						for (int i = search_from; i >= 0; i--) {
-							if (!items[i].separator && !items[i].disabled) {
+							if (!items[i].separator && !items[i].disabled && items[i].visible) {
 								mouse_over = i;
 								emit_signal(SNAME("id_focused"), items[i].id);
 								scroll_to_item(i);
@@ -1551,7 +1577,7 @@ void PopupMenu::_notification(int p_what) {
 						if (!match_found) {
 							// If the first item is not selectable, try re-searching from the end.
 							for (int i = items.size() - 1; i >= search_from; i--) {
-								if (!items[i].separator && !items[i].disabled) {
+								if (!items[i].separator && !items[i].disabled && items[i].visible) {
 									mouse_over = i;
 									emit_signal(SNAME("id_focused"), items[i].id);
 									scroll_to_item(i);
@@ -3217,10 +3243,28 @@ bool PopupMenu::is_search_bar_enabled() const {
 
 void PopupMenu::set_search_bar_enabled_on_item_count(int p_count) {
 	search_bar_enabled_on_item_count = p_count;
+	notify_property_list_changed();
 }
 
 int PopupMenu::get_search_bar_enabled_on_item_count() const {
 	return search_bar_enabled_on_item_count;
+}
+
+void PopupMenu::set_search_bar_fuzzy_search_enabled(bool p_enabled) {
+	search_bar_fuzzy_search_enabled = p_enabled;
+}
+
+bool PopupMenu::is_search_bar_fuzzy_search_enabled() const {
+	return search_bar_fuzzy_search_enabled;
+}
+
+void PopupMenu::set_search_bar_fuzzy_search_max_misses(int p_max_misses) {
+	ERR_FAIL_COND(p_max_misses < 0);
+	search_bar_fuzzy_search_max_misses = p_max_misses;
+}
+
+int PopupMenu::get_search_bar_fuzzy_search_max_misses() const {
+	return search_bar_fuzzy_search_max_misses;
 }
 
 #ifdef TOOLS_ENABLED
@@ -3294,6 +3338,14 @@ bool PopupMenu::_set(const StringName &p_name, const Variant &p_value) {
 	}
 #endif
 	return false;
+}
+
+void PopupMenu::_validate_property(PropertyInfo &p_property) const {
+	if (search_bar_enabled_on_item_count == 0) {
+		if (p_property.name == "search_bar_fuzzy_search_enabled" || p_property.name == "search_bar_fuzzy_search_max_misses") {
+			p_property.usage = PROPERTY_USAGE_NO_EDITOR;
+		}
+	}
 }
 
 void PopupMenu::_bind_methods() {
@@ -3406,9 +3458,14 @@ void PopupMenu::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("is_system_menu"), &PopupMenu::is_system_menu);
 	ClassDB::bind_method(D_METHOD("set_system_menu", "system_menu_id"), &PopupMenu::set_system_menu);
 	ClassDB::bind_method(D_METHOD("get_system_menu"), &PopupMenu::get_system_menu);
+
 	ClassDB::bind_method(D_METHOD("is_search_bar_enabled"), &PopupMenu::is_search_bar_enabled);
 	ClassDB::bind_method(D_METHOD("set_search_bar_enabled_on_item_count", "count"), &PopupMenu::set_search_bar_enabled_on_item_count);
 	ClassDB::bind_method(D_METHOD("get_search_bar_enabled_on_item_count"), &PopupMenu::get_search_bar_enabled_on_item_count);
+	ClassDB::bind_method(D_METHOD("set_search_bar_fuzzy_search_enabled", "enabled"), &PopupMenu::set_search_bar_fuzzy_search_enabled);
+	ClassDB::bind_method(D_METHOD("is_search_bar_fuzzy_search_enabled"), &PopupMenu::is_search_bar_fuzzy_search_enabled);
+	ClassDB::bind_method(D_METHOD("set_search_bar_fuzzy_search_max_misses", "max_misses"), &PopupMenu::set_search_bar_fuzzy_search_max_misses);
+	ClassDB::bind_method(D_METHOD("get_search_bar_fuzzy_search_max_misses"), &PopupMenu::get_search_bar_fuzzy_search_max_misses);
 
 	ClassDB::bind_method(D_METHOD("set_shrink_height", "shrink"), &PopupMenu::set_shrink_height);
 	ClassDB::bind_method(D_METHOD("get_shrink_height"), &PopupMenu::get_shrink_height);
@@ -3427,6 +3484,8 @@ void PopupMenu::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "shrink_width"), "set_shrink_width", "get_shrink_width");
 
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "search_bar_enabled_on_item_count", PROPERTY_HINT_RANGE, "0,20,1,or_greater"), "set_search_bar_enabled_on_item_count", "get_search_bar_enabled_on_item_count");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "search_bar_fuzzy_search_enabled"), "set_search_bar_fuzzy_search_enabled", "is_search_bar_fuzzy_search_enabled");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "search_bar_fuzzy_search_max_misses", PROPERTY_HINT_RANGE, "0,2,1,or_greater"), "set_search_bar_fuzzy_search_max_misses", "get_search_bar_fuzzy_search_max_misses");
 
 	ADD_ARRAY_COUNT("Items", "item_count", "set_item_count", "get_item_count", "item_");
 
