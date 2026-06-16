@@ -938,6 +938,9 @@ Error OS_Unix::execute(const String &p_path, const List<String> &p_arguments, St
 	}
 	args.push_back(0);
 
+#ifdef __ANDROID__
+	// Android NDK doesn't implement posix_spawn, use fork()+exec().
+	// Args are pre-built above to avoid heap allocations after fork().
 	pid_t pid = fork();
 	ERR_FAIL_COND_V(pid < 0, ERR_CANT_FORK);
 
@@ -948,6 +951,22 @@ Error OS_Unix::execute(const String &p_path, const List<String> &p_arguments, St
 		fprintf(stderr, "Could not create child process: %s\n", p_path.utf8().get_data());
 		raise(SIGKILL);
 	}
+#else
+	// Use posix_spawn instead of fork()+exec() to avoid inheriting
+	// corrupted allocator state. Custom allocators like mimalloc use
+	// locks and TLS that are left inconsistent after fork() in a
+	// multithreaded process, which aborts on os_unfair_lock corruption
+	// (e.g. when the blocking external tools used by platform exporters
+	// such as the Android gradle build are launched).
+	posix_spawnattr_t attr;
+	posix_spawnattr_init(&attr);
+
+	extern char **environ;
+	pid_t pid = 0;
+	int spawn_err = posix_spawnp(&pid, args[0], nullptr, &attr, &args[0], environ);
+	posix_spawnattr_destroy(&attr);
+	ERR_FAIL_COND_V(spawn_err != 0, ERR_CANT_FORK);
+#endif
 
 	int status = 0;
 	const int result = _wait_for_pid_completion(pid, &status, 0);

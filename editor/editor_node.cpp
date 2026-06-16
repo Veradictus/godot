@@ -8004,7 +8004,15 @@ static void _execute_thread(void *p_ud) {
 }
 
 int EditorNode::execute_and_show_output(const String &p_title, const String &p_path, const List<String> &p_arguments, bool p_close_on_ok, bool p_close_on_errors, String *r_output) {
-	if (execute_output_dialog) {
+	// Driving the editor main loop (Main::iteration) and touching UI while
+	// waiting for the process is only safe on the main thread. Project export
+	// now runs on a WorkerThread, so when this is called from there we must not
+	// pump the main loop or touch the renderer/UI (doing so flushes the canvas
+	// command queue off-thread and crashes the GLES3 rasterizer). In that case
+	// we just block on the process; output is still captured into r_output.
+	const bool on_main_thread = Thread::is_main_thread();
+
+	if (on_main_thread && execute_output_dialog) {
 		execute_output_dialog->set_title(p_title);
 		execute_output_dialog->get_ok_button()->set_disabled(true);
 		execute_outputs->clear();
@@ -8022,7 +8030,7 @@ int EditorNode::execute_and_show_output(const String &p_title, const String &p_p
 	eta.execute_output_thread.start(_execute_thread, &eta);
 
 	while (!eta.done.is_set()) {
-		{
+		if (on_main_thread) {
 			MutexLock lock(eta.execute_output_mutex);
 			if (prev_len != eta.output.length()) {
 				String to_add = eta.output.substr(prev_len);
@@ -8036,9 +8044,10 @@ int EditorNode::execute_and_show_output(const String &p_title, const String &p_p
 	}
 
 	eta.execute_output_thread.wait_to_finish();
-	execute_outputs->add_text("\nExit Code: " + itos(eta.exitcode));
 
-	if (execute_output_dialog) {
+	if (on_main_thread && execute_output_dialog) {
+		execute_outputs->add_text("\nExit Code: " + itos(eta.exitcode));
+
 		if (p_close_on_errors && eta.exitcode != 0) {
 			execute_output_dialog->hide();
 		}
