@@ -6326,21 +6326,6 @@ bool EditorNode::is_project_exporting() const {
 	return project_export && project_export->is_exporting();
 }
 
-void EditorNode::show_accept(const String &p_text, const String &p_title) {
-	if (!Thread::is_main_thread()) {
-		callable_mp(this, &EditorNode::show_accept).call_deferred(p_text, p_title);
-		return;
-	}
-	current_menu_option = -1;
-	if (accept) {
-		_close_save_scene_progress();
-		accept->set_ok_button_text(p_title);
-		accept->set_text(p_text);
-		accept->reset_size();
-		EditorInterface::get_singleton()->popup_dialog_centered_clamped(accept, Size2i(), 0.0);
-	}
-}
-
 void EditorNode::show_save_accept(const String &p_text, const String &p_ok_text) {
 	current_menu_option = -1;
 	if (save_accept) {
