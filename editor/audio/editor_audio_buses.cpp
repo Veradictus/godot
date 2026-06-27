@@ -1155,6 +1155,9 @@ EditorAudioBus::EditorAudioBus(EditorAudioBuses *p_buses, bool p_is_master) {
 	add_child(effect_options);
 	LocalVector<StringName> effect_list;
 	ClassDB::get_inheriters_from_class("AudioEffect", effect_list);
+#ifndef DISABLE_DEPRECATED
+	effect_list.erase("AudioEffectLimiter");
+#endif
 	effect_list.sort_custom<StringName::AlphCompare>();
 	for (const StringName &E : effect_list) {
 		if (!ClassDB::can_instantiate(E) || ClassDB::is_virtual(E)) {
@@ -1525,18 +1528,12 @@ void EditorAudioBuses::_file_dialog_callback(const String &p_string) {
 	open_layout(ResourceUID::path_to_uid(p_string));
 }
 
-void EditorAudioBuses::update_layout(EditorDock::DockLayout p_layout) {
-	bool new_floating = (p_layout == EditorDock::DOCK_LAYOUT_FLOATING);
-	if (floating == new_floating) {
-		return;
-	}
-	floating = new_floating;
-
-	if (floating) {
+void EditorAudioBuses::update_layout(EditorDock::DockLayout p_layout, EditorDock::DockSlot p_slot) {
+	if (p_slot != EditorDock::DOCK_SLOT_BOTTOM) {
 		bus_mc->set_theme_type_variation("NoBorderHorizontalBottom");
 		bus_scroll->set_scroll_hint_mode(ScrollContainer::SCROLL_HINT_MODE_TOP_AND_LEFT);
 	} else {
-		bus_mc->set_theme_type_variation("NoBorderBottomPanel");
+		bus_mc->set_theme_type_variation("NoBorderHorizontal");
 		bus_scroll->set_scroll_hint_mode(ScrollContainer::SCROLL_HINT_MODE_ALL);
 	}
 }
@@ -1581,7 +1578,7 @@ EditorAudioBuses::EditorAudioBuses() {
 	menu->get_popup()->connect(SceneStringName(id_pressed), callable_mp(this, &EditorAudioBuses::_menu_option));
 
 	bus_mc = memnew(MarginContainer);
-	bus_mc->set_theme_type_variation("NoBorderBottomPanel");
+	bus_mc->set_theme_type_variation("NoBorderHorizontal");
 	bus_mc->set_v_size_flags(SIZE_EXPAND_FILL);
 	main_vb->add_child(bus_mc);
 
