@@ -43,8 +43,7 @@ String ClaudeReloadServer::_ensure_auth_token() {
 	}
 
 	uint8_t buf[24];
-	CryptoCore::RandomGenerator rng;
-	if (rng.init() != OK || rng.get_random_bytes(buf, sizeof(buf)) != OK) {
+	if (CryptoCore::generate_random(buf, sizeof(buf)) != OK) {
 		// Fall back to a time-seeded pseudo-random token. Good enough for a loopback
 		// endpoint that only runs on the developer's own machine.
 		uint64_t seed = OS::get_singleton()->get_ticks_usec() ^ (uint64_t)this;
