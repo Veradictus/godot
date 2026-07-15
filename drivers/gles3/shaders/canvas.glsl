@@ -511,6 +511,8 @@ void light_blend_compute(uint light_base, vec4 light_color, inout vec3 color) {
 		color.rgb -= light_color.rgb * light_color.a;
 	} else if (blend_mode == LIGHT_FLAGS_BLEND_MODE_MIX) {
 		color.rgb = mix(color.rgb, light_color.rgb, light_color.a);
+	} else if (blend_mode == LIGHT_FLAGS_BLEND_MODE_MAX) {
+		color.rgb = max(color.rgb, light_color.rgb * light_color.a);
 	}
 }
 
