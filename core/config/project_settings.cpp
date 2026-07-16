@@ -627,6 +627,83 @@ bool ProjectSettings::_load_resource_pack(const String &p_pack, bool p_replace_f
 	return true;
 }
 
+bool ProjectSettings::_verify_and_mount_patch(const String &p_path) {
+	// Read the pack and its detached signature, check the signature against the
+	// baked build key, and only then mount it. Any failure returns false and mounts
+	// nothing, so a tampered, unsigned, or unreadable pack can never run.
+	Error data_err = OK;
+	Vector<uint8_t> data = FileAccess::get_file_as_bytes(p_path, &data_err);
+	if (data_err != OK || data.is_empty()) {
+		ERR_PRINT(vformat("Skipping content patch (unreadable): %s", p_path));
+		return false;
+	}
+
+	Error sig_err = OK;
+	Vector<uint8_t> signature = FileAccess::get_file_as_bytes(p_path + ".sig", &sig_err);
+	if (sig_err != OK || signature.is_empty()) {
+		ERR_PRINT(vformat("Skipping content patch (missing signature): %s", p_path));
+		return false;
+	}
+
+	unsigned char digest[32];
+	if (CryptoCore::sha256(data.ptr(), data.size(), digest) != OK) {
+		ERR_PRINT(vformat("Skipping content patch (hash failed): %s", p_path));
+		return false;
+	}
+	Vector<uint8_t> hash;
+	hash.resize(32);
+	memcpy(hash.ptrw(), digest, 32);
+
+	Ref<Crypto> crypto = Ref<Crypto>(Crypto::create());
+	Ref<CryptoKey> key = Ref<CryptoKey>(CryptoKey::create());
+	if (crypto.is_null() || key.is_null() || key->load_from_string(patch_signing_public_key_pem, true) != OK) {
+		ERR_PRINT("Content patch signing key unavailable; refusing to mount.");
+		return false;
+	}
+
+	if (!crypto->verify(HashingContext::HASH_SHA256, hash, signature, key)) {
+		ERR_PRINT(vformat("Rejecting content patch (invalid signature): %s", p_path));
+		return false;
+	}
+
+	return _load_resource_pack(p_path, true, 0, false);
+}
+
+static String _patch_pack_major(const String &p_file) {
+	// Parse the major out of a patch filename "patch-<major>-<N>.pck". The major
+	// itself contains dots (v3.2.0), so it is everything between "patch-" and the
+	// final "-<number>". Returns empty if the name doesn't fit the convention.
+	String base = p_file.get_basename();
+	if (!base.begins_with("patch-")) {
+		return String();
+	}
+
+	base = base.substr(6);
+	int last_dash = base.rfind("-");
+	if (last_dash <= 0) {
+		return String();
+	}
+
+	return base.substr(0, last_dash);
+}
+
+static int64_t _patch_pack_version(const String &p_file) {
+	// The version is the trailing "-<N>" of "patch-<major>-<N>.pck".
+	String base = p_file.get_basename();
+	int last_dash = base.rfind("-");
+	if (last_dash < 0) {
+		return -1;
+	}
+
+	return base.substr(last_dash + 1).to_int();
+}
+
+struct PatchVersionComparator {
+	bool operator()(const String &a, const String &b) const {
+		return _patch_pack_version(a) < _patch_pack_version(b);
+	}
+};
+
 void ProjectSettings::mount_runtime_patches() {
 	// Content patches shipped over the Hub update server live here as .pck files
 	// and override res:// paths in the main pack. replace_files = true lets a
@@ -665,61 +742,37 @@ void ProjectSettings::mount_runtime_patches() {
 	}
 	da->list_dir_end();
 
+	// Discard patches left over from a different major, e.g. after a store update to
+	// a new baseline: an old-major patch mounted over the new base would run stale
+	// code. The current major comes from a project setting the game ships
+	// (application/config/patch_major); when it is unset we skip the check. Mismatched
+	// packs are deleted so they can never mount again.
+	String target_major = get_setting("application/config/patch_major", "");
+	if (!target_major.is_empty()) {
+		for (int i = packs.size() - 1; i >= 0; i--) {
+			String pack_major = _patch_pack_major(packs[i]);
+			if (!pack_major.is_empty() && pack_major != target_major) {
+				DirAccess::remove_absolute(patches_dir.path_join(packs[i]));
+				DirAccess::remove_absolute(patches_dir.path_join(packs[i] + ".sig"));
+				print_line(vformat("Purged content patch for a different major: %s", packs[i]));
+				packs.remove_at(i);
+			}
+		}
+	}
+
 	if (packs.is_empty()) {
 		return;
 	}
 
-	// Every patch must carry a valid signature from our build key before it is
-	// allowed to run, so a tampered or unsigned pack can never be mounted. If the
-	// crypto provider or key is unavailable we fail closed and mount nothing.
-	Ref<Crypto> crypto = Ref<Crypto>(Crypto::create());
-	Ref<CryptoKey> key = Ref<CryptoKey>(CryptoKey::create());
-	if (crypto.is_null() || key.is_null() || key->load_from_string(patch_signing_public_key_pem, true) != OK) {
-		ERR_PRINT("Content patches present but the signing key could not be loaded; refusing to mount any patch.");
-		return;
-	}
-
-	// Lexical order is apply order: the Hub names packs so later revisions sort
-	// last and therefore win.
-	packs.sort();
+	// Apply order is by version number: mount ascending so the newest revision mounts
+	// last and wins. Parsed numerically so v10 sorts after v2 (a lexical sort wouldn't).
+	packs.sort_custom<PatchVersionComparator>();
 
 	String newest_mounted;
 	for (const String &name : packs) {
-		const String path = patches_dir.path_join(name);
-
-		Error data_err = OK;
-		Vector<uint8_t> data = FileAccess::get_file_as_bytes(path, &data_err);
-		if (data_err != OK || data.is_empty()) {
-			ERR_PRINT(vformat("Skipping content patch (unreadable): %s", name));
-			continue;
-		}
-
-		Error sig_err = OK;
-		Vector<uint8_t> signature = FileAccess::get_file_as_bytes(path + ".sig", &sig_err);
-		if (sig_err != OK || signature.is_empty()) {
-			ERR_PRINT(vformat("Skipping content patch (missing signature): %s", name));
-			continue;
-		}
-
-		unsigned char digest[32];
-		if (CryptoCore::sha256(data.ptr(), data.size(), digest) != OK) {
-			ERR_PRINT(vformat("Skipping content patch (hash failed): %s", name));
-			continue;
-		}
-		Vector<uint8_t> hash;
-		hash.resize(32);
-		memcpy(hash.ptrw(), digest, 32);
-
-		if (!crypto->verify(HashingContext::HASH_SHA256, hash, signature, key)) {
-			ERR_PRINT(vformat("Skipping content patch (invalid signature): %s", name));
-			continue;
-		}
-
-		if (_load_resource_pack(path, true, 0, false)) {
+		if (_verify_and_mount_patch(patches_dir.path_join(name))) {
 			print_line(vformat("Mounted content patch: %s", name));
 			newest_mounted = name;
-		} else {
-			ERR_PRINT(vformat("Failed to mount content patch: %s", path));
 		}
 	}
 
@@ -733,6 +786,21 @@ void ProjectSettings::mount_runtime_patches() {
 			mf->close();
 		}
 	}
+}
+
+bool ProjectSettings::mount_runtime_patch(const String &p_path) {
+	// Runtime counterpart to the boot mount, callable from GDScript. The updater
+	// mounts a freshly downloaded patch with this after verifying its hash, so any
+	// scene or script loaded after the call (the menu, the game) comes from the
+	// patched pack, applying the patch in the same session with no restart. The
+	// signature is re-checked here, so this never mounts anything the boot path
+	// wouldn't. The pack stays in user://patches, so the next launch is a clean
+	// boot mount regardless.
+	if (_verify_and_mount_patch(p_path)) {
+		print_line(vformat("Mounted content patch at runtime: %s", p_path));
+		return true;
+	}
+	return false;
 }
 
 void ProjectSettings::_convert_to_last_version(int p_from_version) {
@@ -1748,6 +1816,7 @@ void ProjectSettings::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("globalize_path", "path"), &ProjectSettings::globalize_path);
 	ClassDB::bind_method(D_METHOD("save"), &ProjectSettings::save);
 	ClassDB::bind_method(D_METHOD("load_resource_pack", "pack", "replace_files", "offset"), &ProjectSettings::load_resource_pack, DEFVAL(true), DEFVAL(0));
+	ClassDB::bind_method(D_METHOD("mount_runtime_patch", "path"), &ProjectSettings::mount_runtime_patch);
 
 	ClassDB::bind_method(D_METHOD("save_custom", "file"), &ProjectSettings::_save_custom_bnd);
 

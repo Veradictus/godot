@@ -148,6 +148,10 @@ protected:
 	bool load_resource_pack(const String &p_pack, bool p_replace_files, int p_offset);
 	bool _load_resource_pack(const String &p_pack, bool p_replace_files = true, int p_offset = 0, bool p_main_pack = false);
 
+	// Reads a patch pack, checks its detached signature against the baked key, and
+	// mounts it over res:// if valid. Shared by the boot-time and runtime paths.
+	bool _verify_and_mount_patch(const String &p_path);
+
 	void _add_property_info_bind(const Dictionary &p_info);
 
 	Error _setup(const String &p_path, const String &p_main_pack, bool p_upwards = false, bool p_ignore_override = false);
@@ -191,6 +195,11 @@ public:
 	// after setup() has loaded project settings (so user:// resolves) and before
 	// autoloads or the main scene load.
 	void mount_runtime_patches();
+
+	// Verify and mount a single staged patch at runtime (bound to GDScript). Lets
+	// the updater apply a freshly downloaded pack to scenes loaded afterward
+	// without a restart. Returns true on a successful, signature-checked mount.
+	bool mount_runtime_patch(const String &p_path);
 	String get_imported_files_path() const;
 
 	static ProjectSettings *get_singleton();
