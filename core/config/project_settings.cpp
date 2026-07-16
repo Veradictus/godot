@@ -30,6 +30,10 @@
 
 #include "project_settings.h"
 
+#include "core/config/patch_signing_key.h"
+#include "core/crypto/crypto.h"
+#include "core/crypto/crypto_core.h"
+#include "core/crypto/hashing_context.h"
 #include "core/input/input_map.h"
 #include "core/io/compression.h"
 #include "core/io/config_file.h"
@@ -621,6 +625,114 @@ bool ProjectSettings::_load_resource_pack(const String &p_pack, bool p_replace_f
 	}
 
 	return true;
+}
+
+void ProjectSettings::mount_runtime_patches() {
+	// Content patches shipped over the Hub update server live here as .pck files
+	// and override res:// paths in the main pack. replace_files = true lets a
+	// later pack override an earlier one, so the newest revision wins.
+	const String patches_dir = "user://patches";
+	const String marker_path = patches_dir.path_join(".boot_pending");
+	const String quarantine_dir = patches_dir.path_join("quarantine");
+
+	Ref<DirAccess> da = DirAccess::open(patches_dir);
+	if (da.is_null()) {
+		return; // No patches directory yet: nothing to mount.
+	}
+
+	// A marker left over from the previous boot means that boot mounted a patch
+	// but never confirmed a good start (the client clears the marker once it
+	// reaches a stable point). Treat it as a crash: quarantine the suspect pack
+	// so this boot runs without it. Repeated bad boots peel patches off one at a
+	// time until the game is back on the baseline.
+	if (FileAccess::exists(marker_path)) {
+		String suspect = FileAccess::get_file_as_string(marker_path).strip_edges();
+		if (!suspect.is_empty() && FileAccess::exists(patches_dir.path_join(suspect))) {
+			DirAccess::make_dir_recursive_absolute(quarantine_dir);
+			DirAccess::rename_absolute(patches_dir.path_join(suspect), quarantine_dir.path_join(suspect));
+			DirAccess::remove_absolute(patches_dir.path_join(suspect + ".sig"));
+			ERR_PRINT(vformat("Quarantined content patch after an unconfirmed boot: %s", suspect));
+		}
+		DirAccess::remove_absolute(marker_path);
+	}
+
+	Vector<String> packs;
+	da->list_dir_begin();
+	for (String entry = da->get_next(); !entry.is_empty(); entry = da->get_next()) {
+		if (!da->current_is_dir() && entry.get_extension().to_lower() == "pck") {
+			packs.push_back(entry);
+		}
+	}
+	da->list_dir_end();
+
+	if (packs.is_empty()) {
+		return;
+	}
+
+	// Every patch must carry a valid signature from our build key before it is
+	// allowed to run, so a tampered or unsigned pack can never be mounted. If the
+	// crypto provider or key is unavailable we fail closed and mount nothing.
+	Ref<Crypto> crypto = Ref<Crypto>(Crypto::create());
+	Ref<CryptoKey> key = Ref<CryptoKey>(CryptoKey::create());
+	if (crypto.is_null() || key.is_null() || key->load_from_string(patch_signing_public_key_pem, true) != OK) {
+		ERR_PRINT("Content patches present but the signing key could not be loaded; refusing to mount any patch.");
+		return;
+	}
+
+	// Lexical order is apply order: the Hub names packs so later revisions sort
+	// last and therefore win.
+	packs.sort();
+
+	String newest_mounted;
+	for (const String &name : packs) {
+		const String path = patches_dir.path_join(name);
+
+		Error data_err = OK;
+		Vector<uint8_t> data = FileAccess::get_file_as_bytes(path, &data_err);
+		if (data_err != OK || data.is_empty()) {
+			ERR_PRINT(vformat("Skipping content patch (unreadable): %s", name));
+			continue;
+		}
+
+		Error sig_err = OK;
+		Vector<uint8_t> signature = FileAccess::get_file_as_bytes(path + ".sig", &sig_err);
+		if (sig_err != OK || signature.is_empty()) {
+			ERR_PRINT(vformat("Skipping content patch (missing signature): %s", name));
+			continue;
+		}
+
+		unsigned char digest[32];
+		if (CryptoCore::sha256(data.ptr(), data.size(), digest) != OK) {
+			ERR_PRINT(vformat("Skipping content patch (hash failed): %s", name));
+			continue;
+		}
+		Vector<uint8_t> hash;
+		hash.resize(32);
+		memcpy(hash.ptrw(), digest, 32);
+
+		if (!crypto->verify(HashingContext::HASH_SHA256, hash, signature, key)) {
+			ERR_PRINT(vformat("Skipping content patch (invalid signature): %s", name));
+			continue;
+		}
+
+		if (_load_resource_pack(path, true, 0, false)) {
+			print_line(vformat("Mounted content patch: %s", name));
+			newest_mounted = name;
+		} else {
+			ERR_PRINT(vformat("Failed to mount content patch: %s", path));
+		}
+	}
+
+	// Drop a marker naming the newest mounted patch. The client removes it once
+	// the game reaches a stable point; if it is still here on the next boot, the
+	// block above quarantines that patch.
+	if (!newest_mounted.is_empty()) {
+		Ref<FileAccess> mf = FileAccess::open(marker_path, FileAccess::WRITE);
+		if (mf.is_valid()) {
+			mf->store_string(newest_mounted);
+			mf->close();
+		}
+	}
 }
 
 void ProjectSettings::_convert_to_last_version(int p_from_version) {

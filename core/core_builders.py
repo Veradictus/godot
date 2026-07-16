@@ -71,6 +71,33 @@ uint8_t script_encryption_key[32] = {{
         )
 
 
+def patch_signing_key_builder(target, source, env):
+    # Injects the content-patch verification public key from the
+    # PATCH_SIGNING_PUBLIC_KEY environment variable (a base64-encoded PEM) into a
+    # compiled string. Empty when unset: patch mounting then fails closed.
+    import base64
+
+    src = source[0].read() or ""
+    pem = ""
+    if src:
+        try:
+            pem = base64.b64decode(src).decode("utf-8")
+        except Exception:
+            methods.print_error(
+                "Invalid PATCH_SIGNING_PUBLIC_KEY: expected a base64-encoded public-key PEM."
+            )
+            raise
+
+    escaped = pem.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+
+    with methods.generated_wrapper(str(target[0])) as file:
+        file.write(
+            f"""\
+const char *patch_signing_public_key_pem = "{escaped}";
+"""
+        )
+
+
 def make_certs_header(target, source, env):
     buffer = methods.get_buffer(str(source[0]))
     decomp_size = len(buffer)

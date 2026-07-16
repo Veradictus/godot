@@ -186,6 +186,11 @@ public:
 	String get_project_data_dir_name() const;
 	String get_project_data_path() const;
 	String get_resource_path() const;
+
+	// Mount content patches from user://patches over the main pack. Call once,
+	// after setup() has loaded project settings (so user:// resolves) and before
+	// autoloads or the main scene load.
+	void mount_runtime_patches();
 	String get_imported_files_path() const;
 
 	static ProjectSettings *get_singleton();

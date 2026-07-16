@@ -200,6 +200,15 @@ gen_encrypt = env.CommandNoCache(
 )
 env.add_source_files(env.core_sources, gen_encrypt)
 
+# Generate the content-patch verification public key from the environment.
+patch_signing_public_key = os.environ.get("PATCH_SIGNING_PUBLIC_KEY")
+gen_patch_key = env.CommandNoCache(
+    "patch_signing_key.gen.cpp",
+    env.Value(patch_signing_public_key),
+    env.Run(core_builders.patch_signing_key_builder),
+)
+env.add_source_files(env.core_sources, gen_patch_key)
+
 # Certificates
 env.CommandNoCache(
     "#core/io/certs_compressed.gen.h",

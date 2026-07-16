@@ -2278,6 +2278,14 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 	initialize_modules(MODULE_INITIALIZATION_LEVEL_CORE);
 	register_core_extensions(); // core extensions must be registered after globals setup and before display
 
+#ifndef TOOLS_ENABLED
+	// Project settings are loaded (so user:// resolves) and the CORE modules are
+	// up (so the Crypto provider used for signature checks exists). Mount signed
+	// content patches now, before autoloads and the main scene, so they see the
+	// patched files.
+	globals->mount_runtime_patches();
+#endif
+
 	if (!editor) {
 		ResourceUID::get_singleton()->enable_reverse_cache();
 	}
