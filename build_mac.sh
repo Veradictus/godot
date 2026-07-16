@@ -33,6 +33,10 @@ JOBS="$(sysctl -n hw.ncpu)"
 PROFILE="kaetram.build"
 PRECISION="double"
 BUILD_TOOLS="$HOME/Projects/BuildTools"
+# Windows uses LLVM MinGW (clang), NOT GCC MinGW: GCC miscompiles Godot's
+# AES-encrypted-PCK read path and the exported client hangs at boot (100% CPU,
+# no output). clang codegen is unaffected. Toolchain: mstorsjo/llvm-mingw.
+LLVM_MINGW="$BUILD_TOOLS/llvm-mingw"
 
 # Architectures to build per platform (override here as needed).
 WINDOWS_ARCHS=(x86_64)
@@ -94,14 +98,17 @@ build_macos() {
 }
 
 # =============================================================================
-# Windows (cross-compiled with MinGW-w64; install: brew install mingw-w64)
-# d3d12=no because the kaetram.build profile disables 3D.
+# Windows (cross-compiled with LLVM MinGW / clang — toolchain in $LLVM_MINGW).
+# MUST NOT use GCC MinGW: GCC miscompiles the AES-encrypted-PCK read path and the
+# client hangs at boot. use_llvm=yes + mingw_prefix picks clang; Godot tags the
+# outputs `.llvm` (see package_templates). d3d12=no: kaetram.build disables 3D.
 # =============================================================================
 build_windows() {
-    echo "==> Windows templates (${WINDOWS_ARCHS[*]})"
+    echo "==> Windows templates (${WINDOWS_ARCHS[*]}) via LLVM MinGW (clang)"
+    [ -x "$LLVM_MINGW/bin/x86_64-w64-mingw32-clang" ] || { echo "ERROR: llvm-mingw missing at $LLVM_MINGW"; exit 1; }
     for arch in "${WINDOWS_ARCHS[@]}"; do
-        scons platform=windows target=template_debug   tools=no build_profile="$PROFILE" arch="$arch" precision="$PRECISION" use_mingw=yes d3d12=no -j"$JOBS"
-        scons platform=windows target=template_release  tools=no build_profile="$PROFILE" arch="$arch" precision="$PRECISION" use_mingw=yes d3d12=no -j"$JOBS"
+        scons platform=windows target=template_debug   tools=no build_profile="$PROFILE" arch="$arch" precision="$PRECISION" use_mingw=yes use_llvm=yes mingw_prefix="$LLVM_MINGW" d3d12=no -j"$JOBS"
+        scons platform=windows target=template_release  tools=no build_profile="$PROFILE" arch="$arch" precision="$PRECISION" use_mingw=yes use_llvm=yes mingw_prefix="$LLVM_MINGW" d3d12=no -j"$JOBS"
     done
 }
 
@@ -226,10 +233,10 @@ package_templates() {
     # Windows: debug/release, GUI + console (names per build_windows_double.sh).
     local arch
     for arch in "${WINDOWS_ARCHS[@]}"; do
-        _place "godot.windows.template_debug.${arch}.exe"           "windows_debug_${arch}.exe"
-        _place "godot.windows.template_debug.${arch}.console.exe"   "windows_debug_${arch}_console.exe"
-        _place "godot.windows.template_release.${arch}.exe"         "windows_release_${arch}.exe"
-        _place "godot.windows.template_release.${arch}.console.exe" "windows_release_${arch}_console.exe"
+        _place "godot.windows.template_debug.${arch}.llvm.exe"           "windows_debug_${arch}.exe"
+        _place "godot.windows.template_debug.${arch}.llvm.console.exe"   "windows_debug_${arch}_console.exe"
+        _place "godot.windows.template_release.${arch}.llvm.exe"         "windows_release_${arch}.exe"
+        _place "godot.windows.template_release.${arch}.llvm.console.exe" "windows_release_${arch}_console.exe"
     done
 
     # Linux: godot.linuxbsd.template_<target>.<arch> -> linux_<target>.<arch>.
