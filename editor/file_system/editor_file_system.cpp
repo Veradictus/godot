@@ -3438,8 +3438,9 @@ void EditorFileSystem::_reimport_files_finish(Vector<String> p_reloads) {
 	if (!is_scanning()) {
 		emit_signal(SNAME("filesystem_changed"));
 	}
-	emit_signal(SNAME("resources_reimported"), reloads);
-	memdelete(ep);
+	emit_signal(SNAME("resources_reimported"), p_reloads);
+
+	importing = false;
 }
 
 Error EditorFileSystem::reimport_append(const String &p_file, const HashMap<StringName, Variant> &p_custom_options, const String &p_custom_importer, Variant p_generator_parameters) {
