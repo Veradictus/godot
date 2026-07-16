@@ -745,6 +745,7 @@ void Main::test_cleanup() {}
 // are initialized here. This also combines `Main::setup2()` initialization.
 Error Main::test_setup() {
 	Thread::make_main_thread();
+
 	set_current_thread_safe_for_nodes(true);
 
 	OS::get_singleton()->initialize();
@@ -884,6 +885,8 @@ Error Main::test_setup() {
 void Main::test_cleanup() {
 	ERR_FAIL_COND(!_start_success);
 
+	Thread::make_main_thread();
+
 	// Printing in the usual way can become problematic during/after cleanup.
 	CoreGlobals::print_ready = false;
 
@@ -937,40 +940,28 @@ void Main::test_cleanup() {
 	EngineDebugger::deinitialize();
 	OS::get_singleton()->finalize();
 
-	if (packed_data) {
-		memdelete(packed_data);
-	}
-	if (translation_server) {
-		memdelete(translation_server);
-	}
-	if (tsman) {
-		memdelete(tsman);
-	}
+	memdelete(packed_data);
+	memdelete(translation_server);
+	memdelete(tsman);
 #ifndef PHYSICS_3D_DISABLED
-	if (physics_server_3d_manager) {
-		memdelete(physics_server_3d_manager);
-	}
+	memdelete(physics_server_3d_manager);
 #endif // PHYSICS_3D_DISABLED
 #ifndef PHYSICS_2D_DISABLED
-	if (physics_server_2d_manager) {
-		memdelete(physics_server_2d_manager);
-	}
+	memdelete(physics_server_2d_manager);
 #endif // PHYSICS_2D_DISABLED
-	if (globals) {
-		memdelete(globals);
-	}
+	memdelete(globals);
 
 	unregister_core_driver_types();
 	unregister_core_extensions();
 	uninitialize_modules(MODULE_INITIALIZATION_LEVEL_CORE);
 
-	if (engine) {
-		memdelete(engine);
-	}
+	memdelete(engine);
 
 	unregister_core_types();
 
 	OS::get_singleton()->finalize_core();
+
+	Thread::release_main_thread();
 }
 #endif // TESTS_ENABLED
 
@@ -2930,9 +2921,6 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 
 	message_queue = memnew(MessageQueue);
 
-	Thread::release_main_thread(); // If setup2() is called from another thread, that one will become main thread, so preventively release this one.
-	set_current_thread_safe_for_nodes(false);
-
 #if defined(STEAMAPI_ENABLED)
 	if (editor || project_manager) {
 		steam_tracker = memnew(SteamTracker);
@@ -2972,48 +2960,34 @@ error:
 
 	EngineDebugger::deinitialize();
 
-	if (performance) {
-		memdelete(performance);
-	}
-	if (input_map) {
-		memdelete(input_map);
-	}
-	if (translation_server) {
-		memdelete(translation_server);
-	}
-	if (globals) {
-		memdelete(globals);
-	}
-	if (packed_data) {
-		memdelete(packed_data);
-	}
+	memdelete(performance);
+	memdelete(input_map);
+	memdelete(translation_server);
+	memdelete(globals);
+	memdelete(packed_data);
 
 	unregister_core_driver_types();
 	unregister_core_extensions();
 
-	if (engine) {
-		memdelete(engine);
-	}
+	memdelete(engine);
 
 	unregister_core_types();
 
 	OS::get_singleton()->_cmdline.clear();
 	OS::get_singleton()->_user_args.clear();
 
-	if (message_queue) {
-		memdelete(message_queue);
-	}
+	memdelete(message_queue);
 
 	OS::get_singleton()->benchmark_end_measure("Startup", "Main::Setup");
 
 #if defined(STEAMAPI_ENABLED)
-	if (steam_tracker) {
-		memdelete(steam_tracker);
-	}
+	memdelete(steam_tracker);
 #endif
 
 	OS::get_singleton()->finalize_core();
 	locale = String();
+
+	Thread::release_main_thread();
 
 	return exit_err;
 }
@@ -3396,29 +3370,19 @@ Error Main::setup2(bool p_show_boot_logo) {
 		if (err != OK || display_server == nullptr) {
 			ERR_PRINT("Unable to create DisplayServer, all display drivers failed.\nUse \"--headless\" command line argument to run the engine in headless mode if this is desired (e.g. for continuous integration).");
 
-			if (display_server) {
-				memdelete(display_server);
-			}
+			memdelete(display_server);
 
 			GDExtensionManager::get_singleton()->deinitialize_extensions(GDExtension::INITIALIZATION_LEVEL_SERVERS);
 			uninitialize_modules(MODULE_INITIALIZATION_LEVEL_SERVERS);
 			unregister_server_types();
 
-			if (input) {
-				memdelete(input);
-			}
-			if (tsman) {
-				memdelete(tsman);
-			}
+			memdelete(input);
+			memdelete(tsman);
 #ifndef PHYSICS_3D_DISABLED
-			if (physics_server_3d_manager) {
-				memdelete(physics_server_3d_manager);
-			}
+			memdelete(physics_server_3d_manager);
 #endif // PHYSICS_3D_DISABLED
 #ifndef PHYSICS_2D_DISABLED
-			if (physics_server_2d_manager) {
-				memdelete(physics_server_2d_manager);
-			}
+			memdelete(physics_server_2d_manager);
 #endif // PHYSICS_2D_DISABLED
 
 			return err;
@@ -4385,9 +4349,7 @@ int Main::start() {
 			Object *obj = ClassDB::instantiate(instance_type);
 			MainLoop *script_loop = Object::cast_to<MainLoop>(obj);
 			if (!script_loop) {
-				if (obj) {
-					memdelete(obj);
-				}
+				memdelete(obj);
 				OS::get_singleton()->alert(vformat("Can't load the script \"%s\" as it doesn't inherit from SceneTree or MainLoop.", script));
 				ERR_FAIL_V_MSG(EXIT_FAILURE, vformat("Can't load the script \"%s\" as it doesn't inherit from SceneTree or MainLoop.", script));
 			}
@@ -4409,9 +4371,7 @@ int Main::start() {
 			Object *obj = ClassDB::instantiate(script_base);
 			MainLoop *script_loop = Object::cast_to<MainLoop>(obj);
 			if (!script_loop) {
-				if (obj) {
-					memdelete(obj);
-				}
+				memdelete(obj);
 				OS::get_singleton()->alert("Error: Invalid MainLoop script base type: " + script_base);
 				ERR_FAIL_V_MSG(EXIT_FAILURE, vformat("The global class %s does not inherit from SceneTree or MainLoop.", main_loop_type));
 			}
@@ -5221,6 +5181,8 @@ void Main::force_redraw() {
  * The order matters as some of those steps are linked with each other.
  */
 void Main::cleanup(bool p_force) {
+	Thread::make_main_thread();
+
 	GodotProfileZone("cleanup");
 	OS::get_singleton()->benchmark_begin_measure("Shutdown", "Main::Cleanup");
 	if (!p_force) {
@@ -5324,9 +5286,7 @@ void Main::cleanup(bool p_force) {
 	EngineDebugger::deinitialize();
 
 #ifndef XR_DISABLED
-	if (xr_server) {
-		memdelete(xr_server);
-	}
+	memdelete(xr_server);
 #endif // XR_DISABLED
 
 	if (audio_server) {
@@ -5334,46 +5294,26 @@ void Main::cleanup(bool p_force) {
 		memdelete(audio_server);
 	}
 
-	if (camera_server) {
-		memdelete(camera_server);
-	}
+	memdelete(camera_server);
 
 	OS::get_singleton()->finalize();
 
 	finalize_display();
 
-	if (input) {
-		memdelete(input);
-	}
+	memdelete(input);
 
-	if (packed_data) {
-		memdelete(packed_data);
-	}
-	if (performance) {
-		memdelete(performance);
-	}
-	if (input_map) {
-		memdelete(input_map);
-	}
-	if (translation_server) {
-		memdelete(translation_server);
-	}
-	if (tsman) {
-		memdelete(tsman);
-	}
+	memdelete(packed_data);
+	memdelete(performance);
+	memdelete(input_map);
+	memdelete(translation_server);
+	memdelete(tsman);
 #ifndef PHYSICS_3D_DISABLED
-	if (physics_server_3d_manager) {
-		memdelete(physics_server_3d_manager);
-	}
+	memdelete(physics_server_3d_manager);
 #endif // PHYSICS_3D_DISABLED
 #ifndef PHYSICS_2D_DISABLED
-	if (physics_server_2d_manager) {
-		memdelete(physics_server_2d_manager);
-	}
+	memdelete(physics_server_2d_manager);
 #endif // PHYSICS_2D_DISABLED
-	if (globals) {
-		memdelete(globals);
-	}
+	memdelete(globals);
 
 	if (OS::get_singleton()->is_restart_on_exit_set()) {
 		//attempt to restart with arguments
@@ -5387,18 +5327,14 @@ void Main::cleanup(bool p_force) {
 	memdelete(message_queue);
 
 #if defined(STEAMAPI_ENABLED)
-	if (steam_tracker) {
-		memdelete(steam_tracker);
-	}
+	memdelete(steam_tracker);
 #endif
 
 	unregister_core_driver_types();
 	unregister_core_extensions();
 	uninitialize_modules(MODULE_INITIALIZATION_LEVEL_CORE);
 
-	if (engine) {
-		memdelete(engine);
-	}
+	memdelete(engine);
 
 	unregister_core_types();
 
@@ -5406,4 +5342,6 @@ void Main::cleanup(bool p_force) {
 	OS::get_singleton()->benchmark_dump();
 
 	OS::get_singleton()->finalize_core();
+
+	Thread::release_main_thread();
 }
