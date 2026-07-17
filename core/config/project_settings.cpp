@@ -40,6 +40,7 @@
 #include "core/io/dir_access.h"
 #include "core/io/file_access.h"
 #include "core/io/file_access_pack.h"
+#include "core/io/json.h"
 #include "core/io/marshalls.h"
 #include "core/io/resource_uid.h"
 #include "core/object/callable_mp.h"
@@ -704,6 +705,28 @@ struct PatchVersionComparator {
 	}
 };
 
+// The store build number this binary reports, read from the bundled data/config.json (the same
+// value the client sends as a patch's baseline_build). Returns -1 when unavailable, in which case
+// the boot mount skips the build check rather than purging blindly.
+static int _current_app_build() {
+	if (!FileAccess::exists("res://data/config.json")) {
+		return -1;
+	}
+	String txt = FileAccess::get_file_as_string("res://data/config.json");
+	if (txt.is_empty()) {
+		return -1;
+	}
+	Variant parsed = JSON::parse_string(txt);
+	if (parsed.get_type() != Variant::DICTIONARY) {
+		return -1;
+	}
+	Dictionary cfg = parsed;
+	if (!cfg.has("build_number")) {
+		return -1;
+	}
+	return (int)cfg["build_number"];
+}
+
 void ProjectSettings::mount_runtime_patches() {
 	// Content patches shipped over the Hub update server live here as .pck files
 	// and override res:// paths in the main pack. replace_files = true lets a
@@ -757,6 +780,26 @@ void ProjectSettings::mount_runtime_patches() {
 				print_line(vformat("Purged content patch for a different major: %s", packs[i]));
 				packs.remove_at(i);
 			}
+		}
+	}
+
+	// Discard patches staged under a different store build. A delta patch is valid only against
+	// the exact baseline it was diffed from; a same-major store update changes the build number,
+	// so a pack staged under the old build would run stale code over the new base. The client
+	// records the build it staged under in .staged_build; when that no longer matches this binary,
+	// every staged pack is stale — drop them all and fall back to the store baseline.
+	const String staged_build_path = patches_dir.path_join(".staged_build");
+	int current_build = _current_app_build();
+	if (current_build >= 0 && FileAccess::exists(staged_build_path)) {
+		int staged_build = FileAccess::get_file_as_string(staged_build_path).strip_edges().to_int();
+		if (staged_build != current_build) {
+			for (int i = packs.size() - 1; i >= 0; i--) {
+				DirAccess::remove_absolute(patches_dir.path_join(packs[i]));
+				DirAccess::remove_absolute(patches_dir.path_join(packs[i] + ".sig"));
+				print_line(vformat("Purged content patch staged under build %d (now on build %d): %s", staged_build, current_build, packs[i]));
+				packs.remove_at(i);
+			}
+			DirAccess::remove_absolute(staged_build_path);
 		}
 	}
 
