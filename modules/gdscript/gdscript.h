@@ -463,6 +463,7 @@ class GDScriptLanguage : public ScriptLanguage {
 	void _extension_loaded(const Ref<GDExtension> &p_extension);
 	void _extension_unloading(const Ref<GDExtension> &p_extension);
 #endif
+	void _reload_all_scripts(bool p_soft_reload);
 
 public:
 	bool debug_break(const String &p_error, bool p_allow_continue = true);
@@ -621,6 +622,7 @@ public:
 	virtual String debug_parse_stack_level_expression(int p_level, const String &p_expression, int p_max_subitems = -1, int p_max_depth = -1) override;
 
 	virtual void reload_all_scripts() override;
+	virtual void reload_all_scripts_hard() override;
 	virtual void reload_scripts(const Array &p_scripts, bool p_soft_reload) override;
 	virtual void reload_tool_script(const Ref<Script> &p_script, bool p_soft_reload) override;
 

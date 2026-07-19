@@ -147,10 +147,20 @@ protected:
 
 	bool load_resource_pack(const String &p_pack, bool p_replace_files, int p_offset);
 	bool _load_resource_pack(const String &p_pack, bool p_replace_files = true, int p_offset = 0, bool p_main_pack = false);
+	struct MountedResourcePack {
+		String path;
+		bool replace_files = true;
+		int offset = 0;
+		bool content_patch = false;
+	};
+	Vector<MountedResourcePack> mounted_resource_packs;
+	bool loading_content_patch = false;
 
 	// Reads a patch pack, checks its detached signature against the baked key, and
 	// mounts it over res:// if valid. Shared by the boot-time and runtime paths.
-	bool _verify_and_mount_patch(const String &p_path);
+	bool _verify_and_mount_patch(const String &p_path, bool p_replace_previous_patches = false);
+	void _refresh_runtime_patch_cache();
+	bool runtime_patch_refresh_pending = false;
 
 	void _add_property_info_bind(const Dictionary &p_info);
 
@@ -196,9 +206,9 @@ public:
 	// autoloads or the main scene load.
 	void mount_runtime_patches();
 
-	// Verify and mount a single staged patch at runtime (bound to GDScript). Lets
-	// the updater apply a freshly downloaded pack to scenes loaded afterward
-	// without a restart. Returns true on a successful, signature-checked mount.
+	// Verify and mount a single staged patch at runtime (bound to GDScript), then
+	// refresh already-cached resources and scripts on the deferred queue. Emits
+	// runtime_patch_refreshed when the mounted code is authoritative in this process.
 	bool mount_runtime_patch(const String &p_path);
 	String get_imported_files_path() const;
 

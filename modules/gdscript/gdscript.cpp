@@ -2472,8 +2472,26 @@ struct GDScriptDepSort {
 	}
 };
 
-void GDScriptLanguage::reload_all_scripts() {
-#ifdef DEBUG_ENABLED
+static void _get_gdscript_reload_state(ScriptInstance *p_instance, List<Pair<StringName, Variant>> &r_state) {
+	List<PropertyInfo> properties;
+	p_instance->get_property_list(&properties);
+	for (const PropertyInfo &property : properties) {
+		// ScriptInstance::get_property_state() only keeps serialized properties.
+		// A live GDScript also has non-exported runtime members (object references,
+		// counters, updater state, etc.) which must survive a hard hot reload.
+		if (!(property.usage & (PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_SCRIPT_VARIABLE))) {
+			continue;
+		}
+
+		Pair<StringName, Variant> value;
+		value.first = property.name;
+		if (p_instance->get(value.first, value.second)) {
+			r_state.push_back(value);
+		}
+	}
+}
+
+void GDScriptLanguage::_reload_all_scripts(bool p_soft_reload) {
 	print_verbose("GDScript: Reloading all scripts");
 	Array scripts;
 	{
@@ -2481,7 +2499,7 @@ void GDScriptLanguage::reload_all_scripts() {
 
 		SelfList<GDScript> *elem = script_list.first();
 		while (elem) {
-			if (elem->self()->get_path().is_resource_file()) {
+			if (elem->self()->get_path().is_resource_file() || elem->self()->is_built_in()) {
 				print_verbose("GDScript: Found: " + elem->self()->get_path());
 				scripts.push_back(Ref<GDScript>(elem->self())); //cast to gdscript to avoid being erased by accident
 			}
@@ -2502,13 +2520,18 @@ void GDScriptLanguage::reload_all_scripts() {
 #endif // TOOLS_ENABLED
 	}
 
-	reload_scripts(scripts, true);
-#endif // DEBUG_ENABLED
+	reload_scripts(scripts, p_soft_reload);
+}
+
+void GDScriptLanguage::reload_all_scripts() {
+	_reload_all_scripts(true);
+}
+
+void GDScriptLanguage::reload_all_scripts_hard() {
+	_reload_all_scripts(false);
 }
 
 void GDScriptLanguage::reload_scripts(const Array &p_scripts, bool p_soft_reload) {
-#ifdef DEBUG_ENABLED
-
 	List<Ref<GDScript>> scripts;
 	{
 		MutexLock lock(mutex);
@@ -2548,7 +2571,7 @@ void GDScriptLanguage::reload_scripts(const Array &p_scripts, bool p_soft_reload
 				GDScriptInstance *instance = scr->instances.first()->self();
 				//save instance info
 				List<Pair<StringName, Variant>> state;
-				instance->get_property_state(state);
+				_get_gdscript_reload_state(instance, state);
 				map[instance->get_owner()->get_instance_id()] = state;
 				instance->get_owner()->set_script(Variant());
 			}
@@ -2563,7 +2586,7 @@ void GDScriptLanguage::reload_scripts(const Array &p_scripts, bool p_soft_reload
 				if (obj->get_script_instance()) {
 					map.insert(obj->get_instance_id(), List<Pair<StringName, Variant>>());
 					List<Pair<StringName, Variant>> &state = map[obj->get_instance_id()];
-					obj->get_script_instance()->get_property_state(state);
+					_get_gdscript_reload_state(obj->get_script_instance(), state);
 					obj->set_script(Variant());
 				} else {
 					// no instance found. Let's remove it so we don't loop forever
@@ -2573,9 +2596,11 @@ void GDScriptLanguage::reload_scripts(const Array &p_scripts, bool p_soft_reload
 
 #endif // TOOLS_ENABLED
 
+#ifdef DEBUG_ENABLED
 			for (const KeyValue<ObjectID, List<Pair<StringName, Variant>>> &F : scr->pending_reload_state) {
 				map[F.key] = F.value; //pending to reload, use this one instead
 			}
+#endif
 		}
 	}
 
@@ -2593,9 +2618,27 @@ void GDScriptLanguage::reload_scripts(const Array &p_scripts, bool p_soft_reload
 
 			scr->set_source_code(fresh->get_source_code());
 		} else {
-			scr->load_source_code(scr->get_path());
+			// Exported projects remap .gd paths to compiled .gdc token buffers. The old
+			// reload path opened the logical .gd path directly, so release builds either
+			// reread the remap file or simply recompiled the tokens already in memory.
+			// Resolve the remap and replace the script's source payload before compiling.
+			const String remapped_path = ResourceLoader::path_remap(scr->get_path());
+			Error source_err = OK;
+			if (remapped_path.has_extension("gdc")) {
+				Vector<uint8_t> tokens = GDScriptCache::get_binary_tokens(remapped_path);
+				if (tokens.is_empty()) {
+					source_err = ERR_FILE_CANT_READ;
+				} else {
+					scr->set_binary_tokens_source(tokens);
+				}
+			} else {
+				scr->set_binary_tokens_source(Vector<uint8_t>());
+				source_err = scr->load_source_code(remapped_path);
+			}
+			ERR_CONTINUE_MSG(source_err != OK, vformat("Could not refresh script source '%s': %s", scr->get_path(), error_names[source_err]));
 		}
-		scr->reload(p_soft_reload);
+		Error reload_err = scr->reload(p_soft_reload);
+		ERR_CONTINUE_MSG(reload_err != OK, vformat("Could not reload script '%s': %s", scr->get_path(), error_names[reload_err]));
 
 		//restore state if saved
 		for (KeyValue<ObjectID, List<Pair<StringName, Variant>>> &F : E.value) {
@@ -2616,9 +2659,11 @@ void GDScriptLanguage::reload_scripts(const Array &p_scripts, bool p_soft_reload
 
 			if (!script_inst) {
 				//failed, save reload state for next time if not saved
+#ifdef DEBUG_ENABLED
 				if (!scr->pending_reload_state.has(obj->get_instance_id())) {
 					scr->pending_reload_state[obj->get_instance_id()] = saved_state;
 				}
+#endif
 				continue;
 			}
 
@@ -2633,13 +2678,13 @@ void GDScriptLanguage::reload_scripts(const Array &p_scripts, bool p_soft_reload
 				}
 			}
 
+#ifdef DEBUG_ENABLED
 			scr->pending_reload_state.erase(obj->get_instance_id()); //as it reloaded, remove pending state
+#endif
 		}
 
 		//if instance states were saved, set them!
 	}
-
-#endif // DEBUG_ENABLED
 }
 
 void GDScriptLanguage::reload_tool_script(const Ref<Script> &p_script, bool p_soft_reload) {

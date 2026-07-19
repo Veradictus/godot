@@ -42,6 +42,7 @@
 #include "core/io/file_access_pack.h"
 #include "core/io/json.h"
 #include "core/io/marshalls.h"
+#include "core/io/resource.h"
 #include "core/io/resource_uid.h"
 #include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
@@ -601,7 +602,12 @@ bool ProjectSettings::_load_resource_pack(const String &p_pack, bool p_replace_f
 		// Add the project's resource file system to PackedData so directory access keeps working when
 		// the game is running without a main pack, like in the editor or on Android.
 		PackedData::get_singleton()->add_pack_source(memnew(PackedSourceDirectory));
-		PackedData::get_singleton()->add_pack("res://", false, 0);
+		if (PackedData::get_singleton()->add_pack("res://", false, 0) == OK) {
+			MountedResourcePack directory_pack;
+			directory_pack.path = "res://";
+			directory_pack.replace_files = false;
+			mounted_resource_packs.push_back(directory_pack);
+		}
 		DirAccess::make_default<DirAccessPack>(DirAccess::ACCESS_RESOURCES);
 		using_datapack = true;
 	}
@@ -610,6 +616,13 @@ bool ProjectSettings::_load_resource_pack(const String &p_pack, bool p_replace_f
 	if (!ok) {
 		return false;
 	}
+
+	MountedResourcePack mounted_pack;
+	mounted_pack.path = p_pack;
+	mounted_pack.replace_files = p_replace_files;
+	mounted_pack.offset = p_offset;
+	mounted_pack.content_patch = loading_content_patch;
+	mounted_resource_packs.push_back(mounted_pack);
 
 	if (project_loaded) {
 		// This pack may have declared new global classes (make sure they are picked up).
@@ -628,7 +641,7 @@ bool ProjectSettings::_load_resource_pack(const String &p_pack, bool p_replace_f
 	return true;
 }
 
-bool ProjectSettings::_verify_and_mount_patch(const String &p_path) {
+bool ProjectSettings::_verify_and_mount_patch(const String &p_path, bool p_replace_previous_patches) {
 	// Read the pack and its detached signature, check the signature against the
 	// baked build key, and only then mount it. Any failure returns false and mounts
 	// nothing, so a tampered, unsigned, or unreadable pack can never run.
@@ -667,7 +680,58 @@ bool ProjectSettings::_verify_and_mount_patch(const String &p_path) {
 		return false;
 	}
 
-	return _load_resource_pack(p_path, true, 0, false);
+	if (!p_replace_previous_patches) {
+		loading_content_patch = true;
+		const bool mounted = _load_resource_pack(p_path, true, 0, false);
+		loading_content_patch = false;
+		return mounted;
+	}
+
+	// Hub patches are complete deltas against the store build, not deltas against
+	// one another. Rebuild the pack index without older content patches before
+	// adding the new one, otherwise paths removed by a later patch remain exposed
+	// by an earlier PCK even after that older file is deleted from disk.
+	const Vector<MountedResourcePack> previous_packs = mounted_resource_packs;
+	Vector<MountedResourcePack> replacement_packs;
+	for (const MountedResourcePack &pack : previous_packs) {
+		if (!pack.content_patch) {
+			replacement_packs.push_back(pack);
+		}
+	}
+
+	PackedData::get_singleton()->clear();
+	for (const MountedResourcePack &pack : replacement_packs) {
+		if (PackedData::get_singleton()->add_pack(pack.path, pack.replace_files, pack.offset) != OK) {
+			ERR_PRINT(vformat("Could not rebuild resource pack index while replacing content patch: %s", pack.path));
+			PackedData::get_singleton()->clear();
+			for (const MountedResourcePack &previous_pack : previous_packs) {
+				PackedData::get_singleton()->add_pack(previous_pack.path, previous_pack.replace_files, previous_pack.offset);
+			}
+			return false;
+		}
+	}
+
+	if (PackedData::get_singleton()->add_pack(p_path, true, 0) != OK) {
+		ERR_PRINT(vformat("Could not mount verified content patch: %s", p_path));
+		PackedData::get_singleton()->clear();
+		for (const MountedResourcePack &previous_pack : previous_packs) {
+			PackedData::get_singleton()->add_pack(previous_pack.path, previous_pack.replace_files, previous_pack.offset);
+		}
+		return false;
+	}
+
+	MountedResourcePack patch_pack;
+	patch_pack.path = p_path;
+	patch_pack.content_patch = true;
+	replacement_packs.push_back(patch_pack);
+	mounted_resource_packs = replacement_packs;
+
+	if (project_loaded) {
+		refresh_global_class_list();
+		ResourceUID::get_singleton()->load_from_cache(false);
+	}
+
+	return true;
 }
 
 static String _patch_pack_major(const String &p_file) {
@@ -807,15 +871,18 @@ void ProjectSettings::mount_runtime_patches() {
 		return;
 	}
 
-	// Apply order is by version number: mount ascending so the newest revision mounts
-	// last and wins. Parsed numerically so v10 sorts after v2 (a lexical sort wouldn't).
+	// A patch is a complete delta against the store build, so mount only the newest
+	// valid revision. Fall back through older revisions if a newer one cannot be
+	// verified or opened. Parsed numerically so v10 sorts after v2.
 	packs.sort_custom<PatchVersionComparator>();
 
 	String newest_mounted;
-	for (const String &name : packs) {
+	for (int i = packs.size() - 1; i >= 0; i--) {
+		const String &name = packs[i];
 		if (_verify_and_mount_patch(patches_dir.path_join(name))) {
 			print_line(vformat("Mounted content patch: %s", name));
 			newest_mounted = name;
+			break;
 		}
 	}
 
@@ -833,17 +900,54 @@ void ProjectSettings::mount_runtime_patches() {
 
 bool ProjectSettings::mount_runtime_patch(const String &p_path) {
 	// Runtime counterpart to the boot mount, callable from GDScript. The updater
-	// mounts a freshly downloaded patch with this after verifying its hash, so any
-	// scene or script loaded after the call (the menu, the game) comes from the
-	// patched pack, applying the patch in the same session with no restart. The
-	// signature is re-checked here, so this never mounts anything the boot path
-	// wouldn't. The pack stays in user://patches, so the next launch is a clean
-	// boot mount regardless.
-	if (_verify_and_mount_patch(p_path)) {
+	// mounts a freshly downloaded patch with this after verifying its hash. Merely
+	// mounting is not enough at this point: autoloads and their preloads are already
+	// held in ResourceCache, so ordinary loads would keep returning baseline objects.
+	// Refresh them from the newly mounted overlay on the deferred queue, after the
+	// GDScript frame which requested the mount has returned. This avoids reloading
+	// the updater while one of its methods is still executing.
+	if (_verify_and_mount_patch(p_path, true)) {
 		print_line(vformat("Mounted content patch at runtime: %s", p_path));
+		if (!runtime_patch_refresh_pending) {
+			runtime_patch_refresh_pending = true;
+			callable_mp(this, &ProjectSettings::_refresh_runtime_patch_cache).call_deferred();
+		}
 		return true;
 	}
 	return false;
+}
+
+void ProjectSettings::_refresh_runtime_patch_cache() {
+	// Reload non-script resources in place so existing references (autoload
+	// preloads, themes, scenes, textures, etc.) remain valid but contain the bytes
+	// now exposed by the patch. Scripts are handled by their language afterward:
+	// their reload path must explicitly reread exported binary tokens, which a
+	// generic Resource::reload_from_file() cannot do.
+	List<Ref<Resource>> cached_resources;
+	ResourceCache::get_cached_resources(&cached_resources);
+
+	int refreshed_resources = 0;
+	for (const Ref<Resource> &resource : cached_resources) {
+		if (resource.is_null() || resource->is_class("Script")) {
+			continue;
+		}
+
+		const String path = resource->get_path();
+		if (!path.is_resource_file() || path.contains("::")) {
+			continue;
+		}
+
+		resource->reload_from_file();
+		refreshed_resources++;
+	}
+
+	for (int i = 0; i < ScriptServer::get_language_count(); i++) {
+		ScriptServer::get_language(i)->reload_all_scripts_hard();
+	}
+
+	runtime_patch_refresh_pending = false;
+	print_line(vformat("Refreshed runtime patch cache: %d resources and all loaded scripts.", refreshed_resources));
+	emit_signal(SNAME("runtime_patch_refreshed"));
 }
 
 void ProjectSettings::_convert_to_last_version(int p_from_version) {
@@ -1860,6 +1964,7 @@ void ProjectSettings::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("save"), &ProjectSettings::save);
 	ClassDB::bind_method(D_METHOD("load_resource_pack", "pack", "replace_files", "offset"), &ProjectSettings::load_resource_pack, DEFVAL(true), DEFVAL(0));
 	ClassDB::bind_method(D_METHOD("mount_runtime_patch", "path"), &ProjectSettings::mount_runtime_patch);
+	ADD_SIGNAL(MethodInfo("runtime_patch_refreshed"));
 
 	ClassDB::bind_method(D_METHOD("save_custom", "file"), &ProjectSettings::_save_custom_bnd);
 
